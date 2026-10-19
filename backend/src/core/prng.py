@@ -45,6 +45,11 @@ class PRNG:
         """Obtém o estado interno completo da RNG para serialização/snapshots."""
         return self._rng.getstate()
 
-    def set_state(self, state: Tuple[Any, ...]) -> None:
-        """Restaura o estado interno completo da RNG."""
+    def set_state(self, state: Any) -> None:
+        """Restaura o estado interno completo da RNG, convertendo listas JSON em tuplas se necessário."""
+        if isinstance(state, (list, tuple)):
+            if len(state) >= 3 and isinstance(state[1], list):
+                state = (state[0], tuple(state[1]), state[2])
+            elif isinstance(state, list):
+                state = tuple(state)
         self._rng.setstate(state)

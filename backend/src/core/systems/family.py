@@ -46,10 +46,25 @@ class Family:
             "patriarch_id": self.patriarch_id,
             "matriarch_id": self.matriarch_id,
             "nest_id": self.nest_id,
+            "children_ids": list(self.children_ids),
             "children_count": len(self.children_ids),
             "founded_tick": self.founded_tick,
             "is_active": self.is_active,
         }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> Family:
+        return cls(
+            id=int(data["id"]),
+            clan_name=str(data["clan_name"]),
+            home_cluster_id=int(data["home_cluster_id"]) if data.get("home_cluster_id") is not None else None,
+            patriarch_id=int(data["patriarch_id"]) if data.get("patriarch_id") is not None else None,
+            matriarch_id=int(data["matriarch_id"]) if data.get("matriarch_id") is not None else None,
+            nest_id=int(data["nest_id"]) if data.get("nest_id") is not None else None,
+            children_ids=list(data.get("children_ids", [])),
+            founded_tick=int(data.get("founded_tick", 0)),
+            is_active=bool(data.get("is_active", True)),
+        )
 
 
 class FamilySystem:

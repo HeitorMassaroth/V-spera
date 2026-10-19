@@ -28,6 +28,7 @@ testpaths = [
     "tests",
 ]
 pythonpath = [
+    ".",
     "src"
 ]
 asyncio_mode = "auto"

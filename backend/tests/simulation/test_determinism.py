@@ -56,3 +56,42 @@ def test_different_seeds_produce_different_trajectories():
     hash_b = compute_snapshot_hash(world_b)
 
     assert hash_a != hash_b
+
+
+def test_complete_snapshot_roundtrip_restoration():
+    """Garante fidelidade de 100% no snapshot/restore, preservando clãs, famílias, ninhos, territórios e trajetória idêntica."""
+    world = World(width=1000.0, height=700.0, seed=777, initial_organisms=40, initial_food=80)
+
+    # Executa ciclos suficientes para formar famílias, ninhos, clãs e territórios
+    for _ in range(80):
+        world.step()
+
+    snapshot = world.to_snapshot()
+    assert "families" in snapshot
+    assert "nests" in snapshot
+    assert "clans" in snapshot
+    assert "territories" in snapshot
+    assert "family_coop" in snapshot
+
+    # Restaura novo mundo
+    restored = World.from_snapshot(snapshot)
+
+    assert restored.tick == world.tick
+    assert len(restored.organisms) == len(world.organisms)
+    assert len(restored.foods) == len(world.foods)
+    assert len(restored.family_system.families) == len(world.family_system.families)
+    assert len(restored.family_system.nests) == len(world.family_system.nests)
+    assert len(restored.clan_system.clans) == len(world.clan_system.clans)
+    assert len(restored.territory_system.zones) == len(world.territory_system.zones)
+
+    # Grids espaciais re-populados
+    assert restored.food_grid.item_count == len(world.foods)
+    assert restored.organism_grid.item_count == len(world.organisms)
+
+    # Ambos os mundos devem prosseguir de forma 100% idêntica por mais 30 ciclos
+    for _ in range(30):
+        world.step()
+        restored.step()
+
+    assert compute_snapshot_hash(world) == compute_snapshot_hash(restored)
+

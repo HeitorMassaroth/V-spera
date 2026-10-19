@@ -81,7 +81,7 @@ class AnimalRecord:
             partner_bond_duration=data.get("partner_bond_duration", 0),
             family_id=data.get("family_id"),
             inbreeding_coefficient=float(data.get("inbreeding_coefficient", 0.0)),
-            lineage_id=str(data.get("lineage_id", "L0")),
+            lineage_id=int(data["lineage_id"]) if (isinstance(data.get("lineage_id"), int) or (isinstance(data.get("lineage_id"), str) and str(data.get("lineage_id")).isdigit())) else str(data.get("lineage_id", "L0")),
             lineage_name=str(data.get("lineage_name", "Ancestral")),
             genome=data.get("genome", {}),
             personality=data.get("personality", {}),

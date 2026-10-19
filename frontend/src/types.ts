@@ -455,6 +455,51 @@ export interface AnimalMemory {
   safe_haven?: [number, number] | null;
 }
 
+export interface TacticalSkillsInfo {
+  foraging_efficiency: number;
+  hunting_proficiency: number;
+  evasion_proficiency: number;
+  mobbing_coordination: number;
+  experience: number;
+}
+
+export interface FoodHotspotInfo {
+  x: number;
+  y: number;
+  discovery_tick: number;
+  last_harvest_tick: number;
+  harvest_count: number;
+  reliability: number;
+  is_active: boolean;
+}
+
+export interface DangerHotspotInfo {
+  x: number;
+  y: number;
+  source: string;
+  first_seen_tick: number;
+  last_seen_tick: number;
+  threat_level: number;
+  encounter_count: number;
+  is_active: boolean;
+}
+
+export interface ThreatProfileInfo {
+  target_id: number;
+  target_name: string;
+  threat_score: number;
+  encounters: number;
+  last_tick: number;
+}
+
+export interface AnimalKnowledgeInfo {
+  experience_points: number;
+  tactical_skills: TacticalSkillsInfo;
+  food_hotspots: FoodHotspotInfo[];
+  danger_hotspots: DangerHotspotInfo[];
+  known_threats: ThreatProfileInfo[];
+}
+
 export interface AnimalRecord {
   id: number;
   name: string;
@@ -601,10 +646,12 @@ export interface OrganismDetailResponse {
     mourning_ticks?: number;
     personality?: AnimalPersonality;
     memory?: AnimalMemory;
+    knowledge?: AnimalKnowledgeInfo;
     nest?: NestInfo | null;
     cause_of_death?: string | null;
     clan_id?: number | null;
     clan_role?: string | null;
+    territory_id?: number | null;
     leadership_score?: number;
     genotype?: GenotypeInfo | Record<string, any>;
     phenotype?: PhenotypeInfo | Record<string, any>;

@@ -35,10 +35,10 @@ class EpisodicMemory:
             "event_type": self.event_type,
             "description": self.description,
             "tick": self.tick,
-            "x": round(self.x, 1),
-            "y": round(self.y, 1),
-            "intensity": round(self.intensity, 2),
-            "relevance": round(self.relevance, 2),
+            "x": self.x,
+            "y": self.y,
+            "intensity": self.intensity,
+            "relevance": self.relevance,
             "involved_id": self.involved_id,
             "involved_name": self.involved_name,
         }
@@ -146,12 +146,12 @@ class AnimalMemory:
     def add_food_source(self, x: float, y: float, tick: int) -> None:
         """Memoriza uma localização fértil de alimento recente (mantém até 3 fontes)."""
         filtered = [s for s in self.known_food_sources if math.hypot(s[0] - x, s[1] - y) > 35.0]
-        self.known_food_sources = [(round(x, 1), round(y, 1), tick)] + filtered[:2]
+        self.known_food_sources = [(x, y, tick)] + filtered[:2]
 
     def add_danger_zone(self, x: float, y: float, tick: int) -> None:
         """Memoriza local de ataque violento ou ferimento recente para evasão cautelosa."""
         filtered = [z for z in self.danger_zones if math.hypot(z[0] - x, z[1] - y) > 40.0]
-        self.danger_zones = [(round(x, 1), round(y, 1), tick)] + filtered[:3]
+        self.danger_zones = [(x, y, tick)] + filtered[:3]
 
     def add_lost_relative(self, name: str, tick: int, cause: str) -> None:
         """Registra a perda traumática de um parceiro ou filhote."""
@@ -161,10 +161,10 @@ class AnimalMemory:
 
     def to_dict(self) -> Dict[str, Any]:
         return {
-            "known_food_sources": [[round(x, 1), round(y, 1), t] for x, y, t in self.known_food_sources],
-            "danger_zones": [[round(x, 1), round(y, 1), t] for x, y, t in self.danger_zones],
+            "known_food_sources": [[x, y, t] for x, y, t in self.known_food_sources],
+            "danger_zones": [[x, y, t] for x, y, t in self.danger_zones],
             "lost_relatives": self.lost_relatives,
-            "safe_haven": [round(self.safe_haven[0], 1), round(self.safe_haven[1], 1)] if self.safe_haven else None,
+            "safe_haven": [self.safe_haven[0], self.safe_haven[1]] if self.safe_haven else None,
             "episodes": [ep.to_dict() for ep in self.episodes],
         }
 
@@ -349,9 +349,10 @@ class Organism:
         self.territory_cooldown: int = territory_cooldown
         self.target_migration_zone: Optional[Tuple[float, float]] = target_migration_zone
 
-        # Ajusta propriedades físicas e cinemáticas a partir do genoma e papel
-        self._sync_genome_to_traits()
-        self.apply_role_traits(self.role)
+        # Ajusta propriedades físicas e cinemáticas a partir do genoma e papel apenas se traits não foram fornecidos
+        if traits is None:
+            self._sync_genome_to_traits()
+            self.apply_role_traits(self.role)
 
     def distance_to(self, x: float, y: float) -> float:
         """Calcula a distância euclidiana até coordenadas alvo no ambiente."""
@@ -681,13 +682,13 @@ class Organism:
         return {
             "id": self.id,
             "name": self.name,
-            "x": round(self.x, 3),
-            "y": round(self.y, 3),
-            "vx": round(self.vx, 3),
-            "vy": round(self.vy, 3),
-            "energy": round(self.energy, 2),
-            "hunger": round(self.hunger, 2),
-            "saude": round(self.saude, 2),
+            "x": self.x,
+            "y": self.y,
+            "vx": self.vx,
+            "vy": self.vy,
+            "energy": self.energy,
+            "hunger": self.hunger,
+            "saude": self.saude,
             "age": self.age,
             "sex": self.sex,
             "life_stage": self.life_stage,
@@ -698,8 +699,8 @@ class Organism:
             "memory": self.memory.to_dict(),
             "knowledge": self.knowledge.to_dict(),
             "current_state": self.current_state,
-            "carried_food": round(self.carried_food, 2),
-            "wander_angle": round(self.wander_angle, 4),
+            "carried_food": self.carried_food,
+            "wander_angle": self.wander_angle,
             "generation": self.generation,
             "father_id": self.father_id,
             "mother_id": self.mother_id,
@@ -730,6 +731,8 @@ class Organism:
             "species": self.species,
             "relationships": [r.to_dict() for r in self.relationships.values()],
             "territory_id": self.territory_id,
+            "territory_cooldown": self.territory_cooldown,
+            "target_migration_zone": list(self.target_migration_zone) if self.target_migration_zone else None,
         }
 
     def to_compact_dict(self) -> Dict[str, Any]:
@@ -819,6 +822,9 @@ class Organism:
             cause_of_death=data.get("cause_of_death"),
             clan_id=data.get("clan_id"),
             clan_role=data.get("clan_role"),
+            territory_id=data.get("territory_id"),
+            territory_cooldown=data.get("territory_cooldown", 0),
+            target_migration_zone=tuple(data["target_migration_zone"]) if data.get("target_migration_zone") else None,
         )
         if "relationships" in data:
             org.relationships = {

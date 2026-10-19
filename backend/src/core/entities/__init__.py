@@ -8,6 +8,10 @@ from .clan import Clan, ClanSocialStage, ClanRelation, ClanPriorityType, calcula
 from .genetics import Genotype, Phenotype, AllelePair, MutationRecord, GeneticsEngine, AnimalGenome, AnimalPersonality
 from .chronicle import EcosystemChronicle, ChronicleEvent, ChronicleEventType
 
+from .territory import TerritoryZone
+from .environment import SeasonType, EnvironmentalState
+from .knowledge import AnimalKnowledge
+
 __all__ = [
     "OrganismTraits",
     "Food",
@@ -18,6 +22,10 @@ __all__ = [
     "ClanRelation",
     "ClanPriorityType",
     "calculate_leadership_score",
+    "TerritoryZone",
+    "SeasonType",
+    "EnvironmentalState",
+    "AnimalKnowledge",
     "Genotype",
     "Phenotype",
     "AllelePair",

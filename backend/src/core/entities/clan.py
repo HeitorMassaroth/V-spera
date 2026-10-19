@@ -59,6 +59,20 @@ class ClanPriority:
             "created_tick": self.created_tick,
         }
 
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> ClanPriority:
+        raw_type = data["type"]
+        p_type = ClanPriorityType(raw_type) if isinstance(raw_type, str) else raw_type
+        return cls(
+            type=p_type,
+            title=str(data.get("title", "")),
+            urgency=int(data.get("urgency", 3)),
+            description=str(data.get("description", "")),
+            target_cluster_id=int(data["target_cluster_id"]) if data.get("target_cluster_id") is not None else None,
+            target_clan_id=int(data["target_clan_id"]) if data.get("target_clan_id") is not None else None,
+            created_tick=int(data.get("created_tick", 0)),
+        )
+
 
 @dataclass
 class ClanObjective:
@@ -77,10 +91,28 @@ class ClanObjective:
             "id": self.id,
             "type": self.type.value,
             "assigned_count": len(self.assigned_organism_ids),
+            "assigned_organism_ids": list(self.assigned_organism_ids),
             "progress": round(self.progress, 1),
+            "target_amount": round(self.target_amount, 1),
+            "current_amount": round(self.current_amount, 1),
             "is_completed": self.is_completed,
             "is_failed": self.is_failed,
         }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> ClanObjective:
+        raw_type = data["type"]
+        p_type = ClanPriorityType(raw_type) if isinstance(raw_type, str) else raw_type
+        return cls(
+            id=str(data["id"]),
+            type=p_type,
+            assigned_organism_ids=list(data.get("assigned_organism_ids", [])),
+            progress=float(data.get("progress", 0.0)),
+            target_amount=float(data.get("target_amount", 50.0)),
+            current_amount=float(data.get("current_amount", 0.0)),
+            is_completed=bool(data.get("is_completed", False)),
+            is_failed=bool(data.get("is_failed", False)),
+        )
 
 
 # Pesos configuráveis para o cálculo do Índice de Força de Liderança
@@ -383,18 +415,98 @@ class Clan:
             "alpha_approval_rating": round(self.alpha_approval_rating, 1),
             "has_legitimacy_crisis": self.has_legitimacy_crisis,
             "crisis_ticks": self.crisis_ticks,
+            "last_election_tick": self.last_election_tick,
             "communal_food": round(self.communal_food, 1),
             "total_food_contributed": round(self.total_food_contributed, 1),
             "total_food_consumed": round(self.total_food_consumed, 1),
+            "family_contributions": {str(k): v for k, v in self.family_contributions.items()},
+            "family_consumptions": {str(k): v for k, v in self.family_consumptions.items()},
             "territory": {
                 "x": round(self.territory_x, 1),
                 "y": round(self.territory_y, 1),
                 "radius": round(self.territory_radius, 1),
             },
+            "nest_ids": list(self.nest_ids),
             "priorities": [p.to_dict() for p in self.priorities],
             "active_objectives": [o.to_dict() for o in self.active_objectives],
             "diplomacy": {str(k): v.value for k, v in self.diplomacy.items()},
+            "diplomacy_scores": {str(k): v for k, v in self.diplomacy_scores.items()},
+            "truce_ticks": {str(k): v for k, v in self.truce_ticks.items()},
             "history_log": self.history_log[-15:], # Últimos 15 acontecimentos
             "founded_tick": self.founded_tick,
             "is_active": self.is_active,
         }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> Clan:
+        priorities = [
+            ClanPriority.from_dict(p) if isinstance(p, dict) else p
+            for p in data.get("priorities", [])
+        ]
+        objectives = [
+            ClanObjective.from_dict(o) if isinstance(o, dict) else o
+            for o in data.get("active_objectives", [])
+        ]
+        raw_diplomacy = data.get("diplomacy", {})
+        diplomacy = {
+            int(k): ClanRelation(v) if isinstance(v, str) else v
+            for k, v in raw_diplomacy.items()
+        }
+        diplomacy_scores = {
+            int(k): float(v)
+            for k, v in data.get("diplomacy_scores", {}).items()
+        }
+        truce_ticks = {
+            int(k): int(v)
+            for k, v in data.get("truce_ticks", {}).items()
+        }
+        family_contributions = {
+            int(k): float(v)
+            for k, v in data.get("family_contributions", {}).items()
+        }
+        family_consumptions = {
+            int(k): float(v)
+            for k, v in data.get("family_consumptions", {}).items()
+        }
+        terr = data.get("territory", {})
+        tx = float(terr.get("x", 0.0))
+        ty = float(terr.get("y", 0.0))
+        tr = float(terr.get("radius", 180.0))
+
+        raw_stage = data.get("stage", ClanSocialStage.INDEPENDENT.value)
+        try:
+            stage = ClanSocialStage(raw_stage)
+        except Exception:
+            stage = ClanSocialStage.INDEPENDENT
+
+        return cls(
+            id=int(data["id"]),
+            name=str(data["name"]),
+            stage=stage,
+            family_ids=set(data.get("family_ids", [])),
+            alpha_id=int(data["alpha_id"]) if data.get("alpha_id") is not None else None,
+            beta_id=int(data["beta_id"]) if data.get("beta_id") is not None else None,
+            alpha_score=float(data.get("alpha_score", 0.0)),
+            beta_score=float(data.get("beta_score", 0.0)),
+            alpha_approval_rating=float(data.get("alpha_approval_rating", 100.0)),
+            has_legitimacy_crisis=bool(data.get("has_legitimacy_crisis", False)),
+            crisis_ticks=int(data.get("crisis_ticks", 0)),
+            last_election_tick=int(data.get("last_election_tick", 0)),
+            communal_food=float(data.get("communal_food", 0.0)),
+            total_food_contributed=float(data.get("total_food_contributed", 0.0)),
+            total_food_consumed=float(data.get("total_food_consumed", 0.0)),
+            family_contributions=family_contributions,
+            family_consumptions=family_consumptions,
+            territory_x=tx,
+            territory_y=ty,
+            territory_radius=tr,
+            nest_ids=set(data.get("nest_ids", [])),
+            priorities=priorities,
+            active_objectives=objectives,
+            diplomacy=diplomacy,
+            diplomacy_scores=diplomacy_scores,
+            truce_ticks=truce_ticks,
+            history_log=list(data.get("history_log", [])),
+            founded_tick=int(data.get("founded_tick", 0)),
+            is_active=bool(data.get("is_active", True)),
+        )

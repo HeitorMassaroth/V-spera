@@ -136,3 +136,35 @@ class EnvironmentalState:
             "food_spawned_season": round(self.food_spawned_season, 1),
             "season_history": self.season_history[-8:],
         }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> EnvironmentalState:
+        raw_season = data.get("season", SeasonType.SPRING.value)
+        try:
+            season = SeasonType(raw_season)
+        except Exception:
+            season = SeasonType.SPRING
+
+        return cls(
+            tick=int(data.get("tick", 0)),
+            year=int(data.get("year", 1)),
+            season=season,
+            season_tick=int(data.get("season_tick", 0)),
+            season_duration=int(data.get("season_duration", 250)),
+            season_progress=float(data.get("season_progress", 0.0)),
+            temperature=float(data.get("temperature", 20.0)),
+            food_spawn_multiplier=float(data.get("food_spawn_multiplier", 1.0)),
+            metabolic_cost_multiplier=float(data.get("metabolic_cost_multiplier", 1.0)),
+            reproduction_cost_multiplier=float(data.get("reproduction_cost_multiplier", 1.0)),
+            movement_cost_multiplier=float(data.get("movement_cost_multiplier", 1.0)),
+            environmental_stress=float(data.get("environmental_stress", 0.15)),
+            births_this_season=int(data.get("births_this_season", 0)),
+            deaths_this_season=int(data.get("deaths_this_season", 0)),
+            vrancos_births_season=int(data.get("vrancos_births_season", 0)),
+            vrancos_deaths_season=int(data.get("vrancos_deaths_season", 0)),
+            predators_births_season=int(data.get("predators_births_season", 0)),
+            predators_deaths_season=int(data.get("predators_deaths_season", 0)),
+            food_consumed_season=float(data.get("food_consumed_season", 0.0)),
+            food_spawned_season=float(data.get("food_spawned_season", 0.0)),
+            season_history=list(data.get("season_history", [])),
+        )

@@ -11,13 +11,15 @@ from .spatial.spatial_grid import SpatialHashGrid
 from .systems.movement import MovementSystem
 from .systems.metabolism import MetabolismSystem
 from .systems.perception import PerceptionSystem
-from .systems.family import FamilySystem
+from .systems.family import FamilySystem, Family
 from .systems.clan_system import ClanSystem
 from .systems.territory_system import TerritorySystem
 from .systems.environment_system import EnvironmentSystem
 from .systems.learning_system import LearningSystem
-from .entities.environment import SeasonType
-from .entities.clan import ClanSocialStage, ClanRelation
+from .entities.nest import Nest
+from .entities.environment import SeasonType, EnvironmentalState
+from .entities.clan import Clan, ClanSocialStage, ClanRelation
+from .entities.territory import TerritoryZone
 from .entities.genetics import GeneticsEngine, AnimalGenome
 from .entities.genealogy import GenealogyRegistry
 from .entities.chronicle import EcosystemChronicle, ChronicleEvent, ChronicleEventType
@@ -150,7 +152,6 @@ class World:
                 energy=self.prng.uniform(85.0, 115.0),
                 saude=genome.max_saude,
                 species=Organism.SPECIES_PREDATOR,
-                traits=OrganismTraits(),
                 genome=genome,
                 personality=personality,
                 wander_angle=self.prng.uniform(0.0, 2.0 * math.pi),
@@ -228,7 +229,6 @@ class World:
                 energy=self.prng.uniform(85.0, 115.0),
                 saude=genome.max_saude * 0.60,
                 species=Organism.SPECIES_VRANCO,
-                traits=OrganismTraits(),
                 genome=genome,
                 personality=personality,
                 wander_angle=self.prng.uniform(0.0, 2.0 * math.pi),
@@ -1105,7 +1105,7 @@ class World:
         return food
 
     def to_snapshot(self) -> Dict[str, Any]:
-        """Gera o estado completo serializado para checkpoint e persistência."""
+        """Gera o estado completo serializado para checkpoint e persistência com integridade total."""
         return {
             "tick": self.tick,
             "seed": self.seed,
@@ -1118,20 +1118,32 @@ class World:
             "food_cluster_radius": self.food_cluster_radius,
             "next_id": self._next_id,
             "next_family_id": self._next_family_id_counter,
+            "next_nest_id": self.family_system._next_nest_id_counter,
+            "next_clan_id": self.clan_system._next_clan_id_counter,
             "cluster_homes": {str(k): v for k, v in self.family_system.cluster_homes.items()},
             "total_births": self.total_births,
             "total_deaths": self.total_deaths,
             "total_food_consumed": self.total_food_consumed,
             "organisms": [o.to_dict() for o in self.organisms.values()],
             "foods": [f.to_dict() for f in self.foods.values()],
+            "families": [f.to_dict() for f in self.family_system.families.values()],
+            "nests": [n.to_dict() for n in self.family_system.nests.values()],
+            "clans": [c.to_dict() for c in self.clan_system.clans.values()],
+            "territories": [z.to_dict() for z in self.territory_system.zones.values()] if hasattr(self, "territory_system") else [],
+            "family_coop": [{"pair": list(k), "score": v} for k, v in self.clan_system.family_coop.items()],
             "genealogy": self.genealogy.to_snapshot(),
             "chronicle": self.chronicle.to_snapshot(),
             "environment": self.environment_system.state.to_dict() if hasattr(self, "environment_system") else None,
+            "food_accumulator": self._food_accumulator,
+            "recent_events": list(self.recent_events),
+            "last_recorded_season": self._last_recorded_season,
+            "vrancos_extinct_recorded": self._vrancos_extinct_recorded,
+            "predators_extinct_recorded": self._predators_extinct_recorded,
         }
 
     @classmethod
     def from_snapshot(cls, snapshot: Dict[str, Any]) -> World:
-        """Restaura o estado exato da simulação a partir de um snapshot."""
+        """Restaura o estado exato da simulação a partir de um snapshot com integridade total."""
         world = cls(
             width=snapshot["width"],
             height=snapshot["height"],
@@ -1144,15 +1156,24 @@ class World:
         world.tick = snapshot["tick"]
         world._next_id = snapshot["next_id"]
         world._next_family_id_counter = snapshot.get("next_family_id", 1)
+        world._food_accumulator = float(snapshot.get("food_accumulator", 0.0))
+        world.recent_events = list(snapshot.get("recent_events", []))
         world.prng.set_state(snapshot["prng_state"])
         world.total_births = snapshot["total_births"]
         world.total_deaths = snapshot["total_deaths"]
         world.total_food_consumed = snapshot["total_food_consumed"]
-        world.food_clusters = snapshot.get("food_clusters", world._generate_food_clusters(4))
+        world.food_clusters = snapshot["food_clusters"] if "food_clusters" in snapshot else world._generate_food_clusters(4)
         world.food_cluster_radius = snapshot.get("food_cluster_radius", 85.0)
+        world._last_recorded_season = snapshot.get("last_recorded_season")
+        world._vrancos_extinct_recorded = snapshot.get("vrancos_extinct_recorded", False)
+        world._predators_extinct_recorded = snapshot.get("predators_extinct_recorded", False)
+
         world.family_system.cluster_homes = {
             int(k): v for k, v in snapshot.get("cluster_homes", {}).items()
         }
+        world.family_system._next_nest_id_counter = snapshot.get("next_nest_id", 1)
+        world.clan_system._next_clan_id_counter = snapshot.get("next_clan_id", 1)
+
         if "genealogy" in snapshot:
             world.genealogy.from_snapshot(snapshot["genealogy"])
         if "chronicle" in snapshot:
@@ -1166,7 +1187,38 @@ class World:
             food = Food.from_dict(f_data)
             world.foods[food.id] = food
 
-        if hasattr(world, "environment_system"):
-            world.environment_system.update(world.tick, world.organisms, world.foods, world.recent_events)
+        for n_data in snapshot.get("nests", []):
+            nest = Nest.from_dict(n_data)
+            world.family_system.nests[nest.id] = nest
+
+        for fam_data in snapshot.get("families", []):
+            family = Family.from_dict(fam_data)
+            world.family_system.families[family.id] = family
+
+        for c_data in snapshot.get("clans", []):
+            clan = Clan.from_dict(c_data)
+            world.clan_system.clans[clan.id] = clan
+
+        for fc in snapshot.get("family_coop", []):
+            pair = fc.get("pair")
+            if pair and len(pair) == 2:
+                world.clan_system.family_coop[(int(pair[0]), int(pair[1]))] = float(fc.get("score", 0.0))
+
+        if hasattr(world, "territory_system") and "territories" in snapshot:
+            for z_data in snapshot["territories"]:
+                zone = TerritoryZone.from_dict(z_data)
+                world.territory_system.zones[zone.id] = zone
+
+        if hasattr(world, "environment_system") and snapshot.get("environment"):
+            world.environment_system.state = EnvironmentalState.from_dict(snapshot["environment"])
+
+        # Re-popula grids espaciais com entidades ativas restauradas
+        world.food_grid.clear()
+        for f in world.foods.values():
+            world.food_grid.insert(f, f.x, f.y)
+
+        world.organism_grid.clear()
+        for o in world.organisms.values():
+            world.organism_grid.insert(o, o.x, o.y)
 
         return world

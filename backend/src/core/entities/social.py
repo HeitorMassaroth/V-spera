@@ -85,17 +85,16 @@ class SocialRelationship:
         if self.affinity >= 0.65:
             return "Afinidade Amigável"
         return "Neutro / Conhecido"
-
     def to_dict(self) -> Dict[str, Any]:
         return {
             "target_id": self.target_id,
             "target_name": self.target_name,
             "target_species": self.target_species,
-            "trust": round(self.trust, 2),
-            "affinity": round(self.affinity, 2),
-            "fear": round(self.fear, 2),
-            "rivalry": round(self.rivalry, 2),
-            "hostility": round(self.hostility, 2),
+            "trust": self.trust,
+            "affinity": self.affinity,
+            "fear": self.fear,
+            "rivalry": self.rivalry,
+            "hostility": self.hostility,
             "cooperation_count": self.cooperation_count,
             "last_interaction_tick": self.last_interaction_tick,
             "status_label": self.get_status_label(),

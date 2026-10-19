@@ -39,9 +39,9 @@ class FoodHotspot:
 
     def to_dict(self) -> Dict[str, Any]:
         return {
-            "x": round(self.x, 1),
-            "y": round(self.y, 1),
-            "confidence": round(self.confidence, 2),
+            "x": self.x,
+            "y": self.y,
+            "confidence": self.confidence,
             "success_count": self.success_count,
             "failure_count": self.failure_count,
             "last_visited_tick": self.last_visited_tick,
@@ -88,10 +88,10 @@ class DangerHotspot:
 
     def to_dict(self) -> Dict[str, Any]:
         return {
-            "x": round(self.x, 1),
-            "y": round(self.y, 1),
-            "danger_level": round(self.danger_level, 2),
-            "radius": round(self.radius, 1),
+            "x": self.x,
+            "y": self.y,
+            "danger_level": self.danger_level,
+            "radius": self.radius,
             "incident_count": self.incident_count,
             "threat_type": self.threat_type,
             "last_incident_tick": self.last_incident_tick,
@@ -131,7 +131,7 @@ class ThreatProfile:
         return {
             "target_id": self.target_id,
             "target_name": self.target_name,
-            "threat_score": round(self.threat_score, 2),
+            "threat_score": self.threat_score,
             "encounters": self.encounters,
             "last_seen_tick": self.last_seen_tick,
         }
@@ -164,10 +164,10 @@ class TacticalSkills:
 
     def to_dict(self) -> Dict[str, float]:
         return {
-            "evasion_proficiency": round(self.evasion_proficiency, 2),
-            "mobbing_coordination": round(self.mobbing_coordination, 2),
-            "hunting_proficiency": round(self.hunting_proficiency, 2),
-            "foraging_efficiency": round(self.foraging_efficiency, 2),
+            "evasion_proficiency": self.evasion_proficiency,
+            "mobbing_coordination": self.mobbing_coordination,
+            "hunting_proficiency": self.hunting_proficiency,
+            "foraging_efficiency": self.foraging_efficiency,
         }
 
     @classmethod
@@ -350,7 +350,7 @@ class AnimalKnowledge:
             "danger_hotspots": [d.to_dict() for d in self.danger_hotspots],
             "known_threats": [t.to_dict() for t in self.known_threats.values()],
             "tactical_skills": self.tactical_skills.to_dict(),
-            "experience_points": round(self.experience_points, 1),
+            "experience_points": self.experience_points,
             "social_transmissions_received": self.social_transmissions_received,
             "social_transmissions_given": self.social_transmissions_given,
             "mentor_id": self.mentor_id,

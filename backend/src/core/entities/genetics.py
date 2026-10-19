@@ -74,9 +74,9 @@ class AllelePair:
 
     def to_dict(self) -> Dict[str, float]:
         return {
-            "maternal": round(self.maternal, 2),
-            "paternal": round(self.paternal, 2),
-            "value": round(self.value, 2),
+            "maternal": self.maternal,
+            "paternal": self.paternal,
+            "value": self.value,
         }
 
     @classmethod
@@ -310,6 +310,7 @@ class Genotype:
             "lineage_id": self.lineage_id,
             "lineage_name": self.lineage_name,
             "pairs": {k: v.to_dict() for k, v in self.get_pairs().items()},
+            "alleles": {k: v.to_dict() for k, v in self.get_pairs().items()},
         }
 
     def to_detailed_dict(self) -> Dict[str, Any]:
@@ -321,7 +322,7 @@ class Genotype:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> Genotype:
         """Desserialização resiliente suportando formato legado ou bialélico."""
-        alleles_data = data.get("alleles", {})
+        alleles_data = data.get("pairs") or data.get("alleles") or {}
 
         def get_pair(key: str, default_val: float) -> AllelePair:
             if key in alleles_data:
@@ -373,7 +374,7 @@ class AnimalPersonality:
     fertilidade: float = 1.00       # Modulador reprodutivo
 
     def __post_init__(self) -> None:
-        # Sincroniza protecao e instinto_protecao
+        # Sincroniza protecao e instinto_protecao apenas se um for padrão
         if self.protecao != 0.50 and self.instinto_protecao == 0.50:
             self.instinto_protecao = self.protecao
         elif self.instinto_protecao != 0.50 and self.protecao == 0.50:
@@ -381,22 +382,23 @@ class AnimalPersonality:
 
     def to_dict(self) -> Dict[str, float]:
         return {
-            "coragem": round(self.coragem, 2),
-            "agressividade": round(self.agressividade, 2),
-            "sociabilidade": round(self.sociabilidade, 2),
-            "curiosidade": round(self.curiosidade, 2),
-            "cautela": round(self.cautela, 2),
-            "protecao": round(self.protecao, 2),
-            "instinto_protecao": round(self.instinto_protecao, 2),
-            "persistencia": round(self.persistencia, 2),
-            "eficiencia_coleta": round(self.eficiencia_coleta, 2),
-            "exploracao": round(self.exploracao, 2),
-            "fertilidade": round(self.fertilidade, 2),
+            "coragem": self.coragem,
+            "agressividade": self.agressividade,
+            "sociabilidade": self.sociabilidade,
+            "curiosidade": self.curiosidade,
+            "cautela": self.cautela,
+            "protecao": self.protecao,
+            "instinto_protecao": self.instinto_protecao,
+            "persistencia": self.persistencia,
+            "eficiencia_coleta": self.eficiencia_coleta,
+            "exploracao": self.exploracao,
+            "fertilidade": self.fertilidade,
         }
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> AnimalPersonality:
-        prot = float(data.get("protecao", data.get("instinto_protecao", 0.50)))
+        prot = float(data.get("protecao", 0.50))
+        iprot = float(data.get("instinto_protecao", prot))
         return cls(
             coragem=float(data.get("coragem", 0.50)),
             agressividade=float(data.get("agressividade", 0.50)),
@@ -404,7 +406,7 @@ class AnimalPersonality:
             cautela=float(data.get("cautela", 0.50)),
             curiosidade=float(data.get("curiosidade", 0.50)),
             protecao=prot,
-            instinto_protecao=prot,
+            instinto_protecao=iprot,
             persistencia=float(data.get("persistencia", 0.50)),
             eficiencia_coleta=float(data.get("eficiencia_coleta", 1.00)),
             exploracao=float(data.get("exploracao", 1.00)),
