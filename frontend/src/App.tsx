@@ -14,14 +14,22 @@ export const App: React.FC = () => {
     organisms,
     foods,
     clusters,
+    clusterHomes,
+    families,
+    nests,
+    clans,
     metrics,
+    events,
     metricsHistory,
     play,
     pause,
     step,
     reset,
     setSpeed,
+    spawnFood,
   } = useSimulationSocket();
+
+  const [selectedOrganismId, setSelectedOrganismId] = useState<number | null>(null);
 
   const [config, setConfig] = useState<SimulationConfig>({
     seed: 42,
@@ -91,15 +99,35 @@ export const App: React.FC = () => {
             organisms={organisms}
             foods={foods}
             clusters={clusters}
+            clusterHomes={clusterHomes}
+            nests={nests}
+            clans={clans}
+            populationAverages={metrics?.attr_stats}
+            events={events}
+            tick={metrics?.tick ?? 0}
             worldWidth={config.width}
             worldHeight={config.height}
+            selectedOrganismId={selectedOrganismId}
+            onSelectOrganism={setSelectedOrganismId}
+            onSpawnFood={spawnFood}
             onPlayPauseToggle={handlePlayPauseToggle}
             onStep={step}
             onReset={() => reset(config.seed ?? undefined)}
+            onSpeedChange={setSpeed}
+            tps={tps}
           />
         </div>
 
-        <MetricsPanel metrics={metrics} history={metricsHistory} />
+        <MetricsPanel
+          metrics={metrics}
+          events={events}
+          organisms={organisms}
+          families={families}
+          nests={nests}
+          clans={clans}
+          history={metricsHistory}
+          onSelectOrganism={setSelectedOrganismId}
+        />
       </main>
 
       {/* Modal de Configuração de Parâmetros */}

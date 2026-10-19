@@ -1,32 +1,67 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { Eye, Compass, Grid, Maximize2 } from 'lucide-react';
-import type { CompactOrganism, CompactFood } from '../types';
+import {
+  Eye,
+  Compass,
+  Grid,
+  Maximize2,
+  Crosshair,
+  MousePointer,
+  Apple,
+} from 'lucide-react';
+import type { CompactOrganism, CompactFood, AttributeStats, WorldEvent, NestInfo, ClanInfo } from '../types';
 import { WorldRenderer, type RenderOptions } from '../canvas/WorldRenderer';
+import { AnimalInspector } from './AnimalInspector';
 
 interface SimulationViewerProps {
   organisms: CompactOrganism[];
   foods: CompactFood[];
   clusters: [number, number][];
+  clusterHomes?: Record<number, number>;
+  nests?: NestInfo[];
+  clans?: ClanInfo[];
+  populationAverages?: AttributeStats;
+  events?: WorldEvent[];
+  tick: number;
   worldWidth: number;
   worldHeight: number;
+  selectedOrganismId: number | null;
+  onSelectOrganism: (id: number | null) => void;
+  onSpawnFood: (x: number, y: number) => void;
   onPlayPauseToggle: () => void;
   onStep: () => void;
   onReset: () => void;
+  onSpeedChange: (tps: number) => void;
+  tps: number;
 }
 
 export const SimulationViewer: React.FC<SimulationViewerProps> = ({
   organisms,
   foods,
   clusters,
+  clusterHomes,
+  nests,
+  clans,
+  populationAverages,
+  events,
+  tick,
   worldWidth,
   worldHeight,
+  selectedOrganismId,
+  onSelectOrganism,
+  onSpawnFood,
   onPlayPauseToggle,
   onStep,
   onReset,
+  onSpeedChange,
+  tps,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<WorldRenderer | null>(null);
+
+  // Modos de Ferramenta Interativa
+  const [activeTool, setActiveTool] = useState<'inspect' | 'feed'>('inspect');
+  const [followSelected, setFollowSelected] = useState<boolean>(false);
 
   // Estados de visualização
   const [showSensoryRadius, setShowSensoryRadius] = useState<boolean>(false);
@@ -36,12 +71,45 @@ export const SimulationViewer: React.FC<SimulationViewerProps> = ({
   // Estados de Pan & Zoom
   const isDraggingRef = useRef<boolean>(false);
   const lastMousePosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const mouseDownPosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
   // Referência para as entidades mais recentes
-  const stateRef = useRef({ organisms, foods, clusters, worldWidth, worldHeight });
+  const stateRef = useRef({
+    organisms,
+    foods,
+    clusters,
+    clusterHomes,
+    nests,
+    clans,
+    worldWidth,
+    worldHeight,
+    events,
+    tick,
+  });
   useEffect(() => {
-    stateRef.current = { organisms, foods, clusters, worldWidth, worldHeight };
-  }, [organisms, foods, clusters, worldWidth, worldHeight]);
+    stateRef.current = {
+      organisms,
+      foods,
+      clusters,
+      clusterHomes,
+      nests,
+      clans,
+      worldWidth,
+      worldHeight,
+      events,
+      tick,
+    };
+  }, [organisms, foods, clusters, clusterHomes, nests, clans, worldWidth, worldHeight, events, tick]);
+
+  const selectedIdRef = useRef<number | null>(selectedOrganismId);
+  useEffect(() => {
+    selectedIdRef.current = selectedOrganismId;
+  }, [selectedOrganismId]);
+
+  const followSelectedRef = useRef<boolean>(followSelected);
+  useEffect(() => {
+    followSelectedRef.current = followSelected;
+  }, [followSelected]);
 
   // Inicialização e Resize
   useEffect(() => {
@@ -78,6 +146,19 @@ export const SimulationViewer: React.FC<SimulationViewerProps> = ({
     const renderLoop = () => {
       if (rendererRef.current && canvas) {
         const rect = canvas.getBoundingClientRect();
+
+        // Modo Seguir Habitante Selecionado
+        if (followSelectedRef.current && selectedIdRef.current !== null) {
+          const target = stateRef.current.organisms.find((o) => o.id === selectedIdRef.current);
+          if (target) {
+            const targetOffsetX = rect.width / 2 - target.x * rendererRef.current.scale;
+            const targetOffsetY = rect.height / 2 - target.y * rendererRef.current.scale;
+            // Interpolação suave (lerp)
+            rendererRef.current.offsetX += (targetOffsetX - rendererRef.current.offsetX) * 0.12;
+            rendererRef.current.offsetY += (targetOffsetY - rendererRef.current.offsetY) * 0.12;
+          }
+        }
+
         const options: RenderOptions = {
           showSensoryRadius,
           showVelocityVectors,
@@ -92,7 +173,13 @@ export const SimulationViewer: React.FC<SimulationViewerProps> = ({
           stateRef.current.clusters,
           options,
           rect.width,
-          rect.height
+          rect.height,
+          stateRef.current.clusterHomes,
+          selectedIdRef.current,
+          stateRef.current.events,
+          stateRef.current.tick,
+          stateRef.current.nests,
+          stateRef.current.clans
         );
       }
       animationFrameId = requestAnimationFrame(renderLoop);
@@ -109,7 +196,6 @@ export const SimulationViewer: React.FC<SimulationViewerProps> = ({
   // Atalhos de teclado
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Ignora atalhos se o foco estiver num input
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
 
       if (e.code === 'Space') {
@@ -121,17 +207,23 @@ export const SimulationViewer: React.FC<SimulationViewerProps> = ({
       } else if (e.key.toLowerCase() === 'r') {
         e.preventDefault();
         onReset();
+      } else if (e.key === 'Escape') {
+        onSelectOrganism(null);
+        setFollowSelected(false);
+      } else if (e.key.toLowerCase() === 'f') {
+        setActiveTool((prev) => (prev === 'inspect' ? 'feed' : 'inspect'));
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onPlayPauseToggle, onStep, onReset]);
+  }, [onPlayPauseToggle, onStep, onReset, onSelectOrganism]);
 
-  // Manipuladores de mouse para Pan & Zoom
+  // Manipuladores de mouse para Pan, Zoom e Ferramentas Interativas
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     isDraggingRef.current = true;
     lastMousePosRef.current = { x: e.clientX, y: e.clientY };
+    mouseDownPosRef.current = { x: e.clientX, y: e.clientY };
   }, []);
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
@@ -142,11 +234,52 @@ export const SimulationViewer: React.FC<SimulationViewerProps> = ({
 
     rendererRef.current.offsetX += dx;
     rendererRef.current.offsetY += dy;
+
+    // Se o usuário arrastou a tela, desativa followSelected temporariamente para dar controle manual
+    if (Math.hypot(dx, dy) > 2) {
+      setFollowSelected(false);
+    }
   }, []);
 
-  const handleMouseUp = useCallback(() => {
-    isDraggingRef.current = false;
-  }, []);
+  const handleMouseUp = useCallback(
+    (e: React.MouseEvent) => {
+      isDraggingRef.current = false;
+      if (!canvasRef.current || !rendererRef.current) return;
+
+      const dragDist = Math.hypot(
+        e.clientX - mouseDownPosRef.current.x,
+        e.clientY - mouseDownPosRef.current.y
+      );
+
+      // Clique no canvas (sem arrastar)
+      if (dragDist < 5) {
+        const rect = canvasRef.current.getBoundingClientRect();
+        const screenX = e.clientX - rect.left;
+        const screenY = e.clientY - rect.top;
+
+        if (activeTool === 'feed') {
+          // Modo Criador: Semear alimento interativamente
+          const worldPos = rendererRef.current.screenToWorld(screenX, screenY);
+          onSpawnFood(worldPos.x, worldPos.y);
+        } else {
+          // Modo Inspecionar
+          const hit = rendererRef.current.getOrganismAt(
+            screenX,
+            screenY,
+            stateRef.current.organisms
+          );
+
+          if (hit) {
+            onSelectOrganism(hit.id);
+          } else {
+            onSelectOrganism(null);
+            setFollowSelected(false);
+          }
+        }
+      }
+    },
+    [activeTool, onSelectOrganism, onSpawnFood]
+  );
 
   const handleWheel = useCallback((e: React.WheelEvent) => {
     e.preventDefault();
@@ -160,7 +293,6 @@ export const SimulationViewer: React.FC<SimulationViewerProps> = ({
     const renderer = rendererRef.current;
     const newScale = Math.max(0.2, Math.min(4.0, renderer.scale * zoomFactor));
 
-    // Ajusta o offset para dar zoom centrado no ponteiro do mouse
     renderer.offsetX = mouseX - (mouseX - renderer.offsetX) * (newScale / renderer.scale);
     renderer.offsetY = mouseY - (mouseY - renderer.offsetY) * (newScale / renderer.scale);
     renderer.scale = newScale;
@@ -170,7 +302,10 @@ export const SimulationViewer: React.FC<SimulationViewerProps> = ({
     if (!rendererRef.current || !canvasRef.current) return;
     const rect = canvasRef.current.getBoundingClientRect();
     rendererRef.current.resetView(rect.width, rect.height, worldWidth, worldHeight);
+    setFollowSelected(false);
   }, [worldWidth, worldHeight]);
+
+  const liveSelectedOrganism = organisms.find((o) => o.id === selectedOrganismId);
 
   return (
     <div
@@ -188,17 +323,19 @@ export const SimulationViewer: React.FC<SimulationViewerProps> = ({
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseUp}
+        onMouseLeave={() => {
+          isDraggingRef.current = false;
+        }}
         onWheel={handleWheel}
         style={{
           display: 'block',
-          cursor: 'grab',
+          cursor: activeTool === 'feed' ? 'copy' : 'crosshair',
           width: '100%',
           height: '100%',
         }}
       />
 
-      {/* Floating Toggles Top-Left */}
+      {/* Floating Toolbar Top-Left: Ferramentas Interativas e Camadas */}
       <div
         className="glass-panel"
         style={{
@@ -206,18 +343,65 @@ export const SimulationViewer: React.FC<SimulationViewerProps> = ({
           top: '16px',
           left: '16px',
           display: 'flex',
-          gap: '8px',
-          padding: '6px 10px',
+          gap: '6px',
+          padding: '6px 8px',
           borderRadius: '10px',
+          zIndex: 10,
         }}
       >
+        {/* Seletor de Ferramenta */}
+        <div style={{ display: 'flex', background: 'rgba(255, 255, 255, 0.06)', borderRadius: '6px', padding: '2px' }}>
+          <button
+            onClick={() => setActiveTool('inspect')}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              padding: '4px 8px',
+              borderRadius: '5px',
+              fontSize: '11px',
+              fontWeight: 700,
+              background: activeTool === 'inspect' ? 'rgba(56, 189, 248, 0.25)' : 'transparent',
+              color: activeTool === 'inspect' ? '#38BDF8' : 'var(--color-text-muted)',
+              border: 'none',
+              cursor: 'pointer',
+            }}
+            title="Clique nos animais para inspecionar atributos e genealogia"
+          >
+            <MousePointer size={12} /> Inspecionar
+          </button>
+
+          <button
+            onClick={() => setActiveTool('feed')}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              padding: '4px 8px',
+              borderRadius: '5px',
+              fontSize: '11px',
+              fontWeight: 700,
+              background: activeTool === 'feed' ? 'rgba(52, 211, 153, 0.25)' : 'transparent',
+              color: activeTool === 'feed' ? '#34D399' : 'var(--color-text-muted)',
+              border: 'none',
+              cursor: 'pointer',
+            }}
+            title="Clique no canvas para semear alimento (Isca de nutrientes)"
+          >
+            <Apple size={12} /> Semear Alimento
+          </button>
+        </div>
+
+        <div style={{ width: '1px', background: 'rgba(255, 255, 255, 0.1)', margin: '0 2px' }} />
+
+        {/* Camadas Visuais */}
         <button
           onClick={() => setShowSensoryRadius(!showSensoryRadius)}
           style={{
             display: 'flex',
             alignItems: 'center',
-            gap: '5px',
-            padding: '5px 8px',
+            gap: '4px',
+            padding: '4px 8px',
             borderRadius: '6px',
             fontSize: '11px',
             fontWeight: 600,
@@ -226,9 +410,9 @@ export const SimulationViewer: React.FC<SimulationViewerProps> = ({
             border: `1px solid ${showSensoryRadius ? 'rgba(56, 189, 248, 0.4)' : 'transparent'}`,
             cursor: 'pointer',
           }}
-          title="Alternar visualização do raio sensorial"
+          title="Alternar raio sensorial"
         >
-          <Eye size={13} /> Visão
+          <Eye size={12} /> Visão
         </button>
 
         <button
@@ -236,8 +420,8 @@ export const SimulationViewer: React.FC<SimulationViewerProps> = ({
           style={{
             display: 'flex',
             alignItems: 'center',
-            gap: '5px',
-            padding: '5px 8px',
+            gap: '4px',
+            padding: '4px 8px',
             borderRadius: '6px',
             fontSize: '11px',
             fontWeight: 600,
@@ -248,7 +432,7 @@ export const SimulationViewer: React.FC<SimulationViewerProps> = ({
           }}
           title="Alternar vetores de direção"
         >
-          <Compass size={13} /> Vetores
+          <Compass size={12} /> Vetores
         </button>
 
         <button
@@ -256,8 +440,8 @@ export const SimulationViewer: React.FC<SimulationViewerProps> = ({
           style={{
             display: 'flex',
             alignItems: 'center',
-            gap: '5px',
-            padding: '5px 8px',
+            gap: '4px',
+            padding: '4px 8px',
             borderRadius: '6px',
             fontSize: '11px',
             fontWeight: 600,
@@ -268,50 +452,172 @@ export const SimulationViewer: React.FC<SimulationViewerProps> = ({
           }}
           title="Alternar grade espacial"
         >
-          <Grid size={13} /> Grade
+          <Grid size={12} /> Grade
         </button>
       </div>
 
-      {/* Floating Center View Button Bottom-Right */}
-      <button
-        onClick={handleResetView}
+      {/* Floating Caste & Division Legend Top-Right */}
+      <div
         className="glass-panel"
+        style={{
+          position: 'absolute',
+          top: '16px',
+          right: selectedOrganismId !== null ? '410px' : '16px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '5px',
+          padding: '8px 12px',
+          borderRadius: '10px',
+          fontSize: '11px',
+          pointerEvents: 'none',
+          background: 'rgba(11, 17, 30, 0.85)',
+          border: '1px solid rgba(255, 255, 255, 0.1)',
+          zIndex: 10,
+          transition: 'right 0.2s ease',
+        }}
+      >
+        <span style={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#94A3B8' }}>
+          Divisões Naturais
+        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#FB7185', display: 'inline-block' }} />
+          <span style={{ color: '#FDA4AF' }}>Rosa (Fêmea)</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#34D399', display: 'inline-block' }} />
+          <span style={{ color: '#6EE7B7' }}>Verde (Macho Guardião)</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#C084FC', display: 'inline-block' }} />
+          <span style={{ color: '#D8B4FE' }}>Roxo (Filhote)</span>
+        </div>
+      </div>
+
+      {/* Painel Individual de Inspeção do Animal Selecionado */}
+      {selectedOrganismId !== null && (
+        <AnimalInspector
+          organismId={selectedOrganismId}
+          liveOrganism={liveSelectedOrganism}
+          populationAverages={populationAverages}
+          onClose={() => {
+            onSelectOrganism(null);
+            setFollowSelected(false);
+          }}
+          onSelectOrganism={(newId) => onSelectOrganism(newId)}
+        />
+      )}
+
+      {/* Floating Center View & Speed Buttons Bottom-Right */}
+      <div
         style={{
           position: 'absolute',
           bottom: '16px',
           right: '16px',
           display: 'flex',
-          alignItems: 'center',
-          gap: '6px',
-          padding: '8px 12px',
-          borderRadius: '8px',
-          fontSize: '12px',
-          fontWeight: 600,
-          color: '#38BDF8',
-          cursor: 'pointer',
+          gap: '8px',
+          zIndex: 10,
         }}
-        title="Centralizar e ajustar mundo na tela"
       >
-        <Maximize2 size={14} /> Centralizar Visão
-      </button>
+        {selectedOrganismId !== null && (
+          <button
+            onClick={() => setFollowSelected(!followSelected)}
+            className="glass-panel"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '5px',
+              padding: '8px 12px',
+              borderRadius: '8px',
+              fontSize: '11px',
+              fontWeight: 700,
+              background: followSelected ? 'rgba(56, 189, 248, 0.25)' : 'rgba(15, 23, 42, 0.8)',
+              color: followSelected ? '#38BDF8' : '#94A3B8',
+              border: `1px solid ${followSelected ? '#38BDF8' : 'rgba(255, 255, 255, 0.1)'}`,
+              cursor: 'pointer',
+            }}
+            title="Travar câmera e seguir animal selecionado em tempo real"
+          >
+            <Crosshair size={13} /> {followSelected ? 'Seguindo' : 'Seguir Animal'}
+          </button>
+        )}
 
-      {/* Bottom Shortcuts Hint */}
+        <div
+          className="glass-panel"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '3px',
+            padding: '3px 6px',
+            borderRadius: '8px',
+          }}
+        >
+          {[15, 30, 60].map((speed) => (
+            <button
+              key={speed}
+              onClick={() => onSpeedChange(speed)}
+              style={{
+                padding: '4px 7px',
+                borderRadius: '5px',
+                fontSize: '10px',
+                fontWeight: 700,
+                border: 'none',
+                background: tps === speed ? 'rgba(56, 189, 248, 0.25)' : 'transparent',
+                color: tps === speed ? '#38BDF8' : 'var(--color-text-muted)',
+                cursor: 'pointer',
+              }}
+              title={`Definir velocidade para ${speed} TPS`}
+            >
+              {speed} TPS
+            </button>
+          ))}
+        </div>
+
+        <button
+          onClick={handleResetView}
+          className="glass-panel"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '8px 12px',
+            borderRadius: '8px',
+            fontSize: '11px',
+            fontWeight: 600,
+            color: '#38BDF8',
+            cursor: 'pointer',
+          }}
+          title="Centralizar e ajustar mundo na tela"
+        >
+          <Maximize2 size={13} /> Centralizar
+        </button>
+      </div>
+
+      {/* Bottom Shortcuts Hint & Quick Mode */}
       <div
         style={{
           position: 'absolute',
           bottom: '16px',
           left: '16px',
           fontSize: '11px',
-          color: 'rgba(255, 255, 255, 0.4)',
-          background: 'rgba(0, 0, 0, 0.5)',
-          padding: '4px 10px',
+          color: 'rgba(255, 255, 255, 0.5)',
+          background: 'rgba(0, 0, 0, 0.55)',
+          padding: '5px 12px',
           borderRadius: '6px',
           pointerEvents: 'none',
+          zIndex: 10,
+          backdropFilter: 'blur(8px)',
         }}
       >
-        Atalhos: <span style={{ color: '#E2E8F0' }}>[Espaço]</span> Iniciar/Pausar &bull;{' '}
-        <span style={{ color: '#E2E8F0' }}>[ . ]</span> Passo &bull;{' '}
-        <span style={{ color: '#E2E8F0' }}>[R]</span> Reiniciar &bull; Arrasta / Scroll para Zoom
+        {activeTool === 'feed' ? (
+          <span style={{ color: '#34D399', fontWeight: 600 }}>
+            🌿 Clique em qualquer ponto do canvas para semear alimento!
+          </span>
+        ) : (
+          <span>
+            💡 <b>Clique em qualquer habitante</b> para inspecionar &bull; Atalho <span style={{ color: '#E2E8F0' }}>[F]</span> Semear Alimento &bull;{' '}
+            <span style={{ color: '#E2E8F0' }}>[Espaço]</span> Iniciar/Pausar
+          </span>
+        )}
       </div>
     </div>
   );

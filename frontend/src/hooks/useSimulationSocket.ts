@@ -1,5 +1,14 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import type { CompactOrganism, CompactFood, WorldMetrics, SimulationStateMessage } from '../types';
+import type {
+  CompactOrganism,
+  CompactFood,
+  WorldMetrics,
+  SimulationStateMessage,
+  WorldEvent,
+  FamilyInfo,
+  NestInfo,
+  ClanInfo,
+} from '../types';
 
 export function useSimulationSocket(wsUrl: string = 'ws://localhost:8000/api/simulation/ws') {
   const [connected, setConnected] = useState<boolean>(false);
@@ -8,7 +17,12 @@ export function useSimulationSocket(wsUrl: string = 'ws://localhost:8000/api/sim
   const [organisms, setOrganisms] = useState<CompactOrganism[]>([]);
   const [foods, setFoods] = useState<CompactFood[]>([]);
   const [clusters, setClusters] = useState<[number, number][]>([]);
+  const [clusterHomes, setClusterHomes] = useState<Record<number, number>>({});
+  const [families, setFamilies] = useState<FamilyInfo[]>([]);
+  const [nests, setNests] = useState<NestInfo[]>([]);
+  const [clans, setClans] = useState<ClanInfo[]>([]);
   const [metrics, setMetrics] = useState<WorldMetrics | null>(null);
+  const [events, setEvents] = useState<WorldEvent[]>([]);
   const [metricsHistory, setMetricsHistory] = useState<
     Array<{ tick: number; pop: number; food: number; avgEnergy: number }>
   >([]);
@@ -33,6 +47,16 @@ export function useSimulationSocket(wsUrl: string = 'ws://localhost:8000/api/sim
           if (data.orgs) setOrganisms(data.orgs);
           if (data.foods) setFoods(data.foods);
           if (data.clusters) setClusters(data.clusters);
+          if (data.cluster_homes) setClusterHomes(data.cluster_homes);
+          if (data.families) setFamilies(data.families);
+          if (data.nests) setNests(data.nests);
+          if (data.clans) setClans(data.clans);
+          if (data.events && data.events.length > 0) {
+            setEvents((prev) => {
+              const combined = [...prev, ...(data.events || [])];
+              return combined.slice(-50);
+            });
+          }
           if (data.metrics) {
             setMetrics(data.metrics);
             setMetricsHistory((prev) => {
@@ -45,7 +69,6 @@ export function useSimulationSocket(wsUrl: string = 'ws://localhost:8000/api/sim
                   avgEnergy: data.metrics.avg_energy,
                 },
               ];
-              // Mantém os últimos 100 pontos para histórico fluido
               return updated.length > 100 ? updated.slice(updated.length - 100) : updated;
             });
           }
@@ -56,7 +79,6 @@ export function useSimulationSocket(wsUrl: string = 'ws://localhost:8000/api/sim
 
       socket.onclose = () => {
         setConnected(false);
-        // Tenta reconectar a cada 2 segundos
         reconnectTimeoutRef.current = window.setTimeout(() => {
           connect();
         }, 2000);
@@ -89,6 +111,7 @@ export function useSimulationSocket(wsUrl: string = 'ws://localhost:8000/api/sim
   const step = useCallback(() => sendAction('step'), [sendAction]);
   const reset = useCallback((seed?: number) => sendAction('reset', { seed }), [sendAction]);
   const setSpeed = useCallback((newTps: number) => sendAction('set_speed', { tps: newTps }), [sendAction]);
+  const spawnFood = useCallback((x: number, y: number) => sendAction('spawn_food', { x, y }), [sendAction]);
 
   return {
     connected,
@@ -97,13 +120,19 @@ export function useSimulationSocket(wsUrl: string = 'ws://localhost:8000/api/sim
     organisms,
     foods,
     clusters,
+    clusterHomes,
+    families,
+    nests,
+    clans,
     metrics,
+    events,
     metricsHistory,
     play,
     pause,
     step,
     reset,
     setSpeed,
+    spawnFood,
     sendAction,
   };
 }

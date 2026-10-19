@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 import math
-from typing import Tuple, Optional
+from typing import Tuple, Optional, Dict, Set
 from ..entities.organism import Organism
 from ..entities.food import Food
 from ..prng import PRNG
+from ..spatial.spatial_grid import SpatialHashGrid
 
 
 class MovementSystem:
@@ -30,16 +31,52 @@ class MovementSystem:
         prng: PRNG,
     ) -> Tuple[float, float]:
         """Calcula as forças direcionais aplicadas ao organismo no ciclo atual."""
-        if target_food is not None:
+        # 1. Recém-nascidos são imóveis no ninho familiar
+        if getattr(organism, "life_stage", None) == Organism.STAGE_NEWBORN:
+            organism.vx = 0.0
+            organism.vy = 0.0
+            return 0.0, 0.0
+
+        # 2. Filhotes em desenvolvimento mantêm proximidade física com o ninho
+        if getattr(organism, "life_stage", None) == Organism.STAGE_DEVELOPING:
+            if getattr(organism, "memory", None) and organism.memory.safe_haven is not None:
+                hx, hy = organism.memory.safe_haven
+                dist_h = math.hypot(organism.x - hx, organism.y - hy)
+                if dist_h > 26.0:
+                    steer_x, steer_y = self._seek(organism, hx, hy)
+                    wall_x, wall_y = self._boundary_repulsion(organism)
+                    return steer_x + wall_x, steer_y + wall_y
+
+        # 3. Steering baseado no estado comportamental atual
+        current_state = getattr(organism, "current_state", Organism.STATE_FORAGING)
+
+        if current_state == Organism.STATE_DELIVERING_FOOD and getattr(organism, "memory", None) and organism.memory.safe_haven:
+            steer_x, steer_y = self._seek(organism, organism.memory.safe_haven[0], organism.memory.safe_haven[1])
+        elif target_food is not None:
             steer_x, steer_y = self._seek(organism, target_food.x, target_food.y)
+        elif getattr(organism, "energy", 100.0) < 45.0 and getattr(organism, "memory", None) and organism.memory.known_food_sources:
+            kx, ky, _ = organism.memory.known_food_sources[0]
+            steer_x, steer_y = self._seek(organism, kx, ky)
         else:
             steer_x, steer_y = self._wander(organism, prng)
 
-        # Adiciona força de repulsão das paredes
+        # 4. Evasão inteligente de Zonas de Perigo (Memória e Cautela)
+        danger_fx, danger_fy = 0.0, 0.0
+        if getattr(organism, "memory", None) and getattr(organism, "personality", None):
+            cautela = organism.personality.cautela
+            if cautela > 0.35 and organism.memory.danger_zones:
+                for zx, zy, _ in organism.memory.danger_zones:
+                    dz_dist = math.hypot(organism.x - zx, organism.y - zy)
+                    if 0.1 < dz_dist < 55.0:
+                        repel_mag = (1.0 - (dz_dist / 55.0)) * cautela * 0.35
+                        danger_fx += ((organism.x - zx) / dz_dist) * repel_mag
+                        danger_fy += ((organism.y - zy) / dz_dist) * repel_mag
+
+        # 5. Adiciona força de repulsão suave das paredes
         wall_x, wall_y = self._boundary_repulsion(organism)
 
-        total_fx = steer_x + wall_x
-        total_fy = steer_y + wall_y
+        total_fx = steer_x + danger_fx + wall_x
+        total_fy = steer_y + danger_fy + wall_y
         return total_fx, total_fy
 
     def _seek(self, organism: Organism, target_x: float, target_y: float) -> Tuple[float, float]:
@@ -158,3 +195,63 @@ class MovementSystem:
             factor = max_mag / mag
             return vx * factor, vy * factor
         return vx, vy
+
+    def resolve_organism_collisions(
+        self,
+        organisms: Dict[int, Organism],
+        spatial_grid: SpatialHashGrid[Organism],
+    ) -> None:
+        """Resolve colisões e impede sobreposição física entre organismos."""
+        processed_pairs: Set[Tuple[int, int]] = set()
+
+        for org in sorted(organisms.values(), key=lambda o: o.id):
+            if not org.alive:
+                continue
+
+            query_radius = org.traits.size * 2.5
+            nearby = spatial_grid.query_radius(org.x, org.y, query_radius)
+
+            for other, dist in nearby:
+                if other.id == org.id or not other.alive:
+                    continue
+
+                pair_key = (min(org.id, other.id), max(org.id, other.id))
+                if pair_key in processed_pairs:
+                    continue
+                processed_pairs.add(pair_key)
+
+                min_dist = org.traits.size + other.traits.size
+
+                if dist < min_dist:
+                    overlap = min_dist - dist
+                    if dist > 1e-4:
+                        nx = (org.x - other.x) / dist
+                        ny = (org.y - other.y) / dist
+                    else:
+                        nx = 1.0
+                        ny = 0.0
+
+                    m1 = max(0.5, (org.traits.size / 5.0) ** 2)
+                    m2 = max(0.5, (other.traits.size / 5.0) ** 2)
+                    total_mass = m1 + m2
+
+                    ratio1 = m2 / total_mass
+                    ratio2 = m1 / total_mass
+
+                    org.x += nx * overlap * ratio1
+                    org.y += ny * overlap * ratio1
+                    other.x -= nx * overlap * ratio2
+                    other.y -= ny * overlap * ratio2
+
+                    # Resposta de velocidade elástica com amortecimento
+                    rvx = org.vx - other.vx
+                    rvy = org.vy - other.vy
+                    vel_along_normal = rvx * nx + rvy * ny
+
+                    if vel_along_normal < 0:
+                        restitution = 0.55
+                        impulse_mag = -(1.0 + restitution) * vel_along_normal / (1.0 / m1 + 1.0 / m2)
+                        org.vx += (impulse_mag / m1) * nx
+                        org.vy += (impulse_mag / m1) * ny
+                        other.vx -= (impulse_mag / m2) * nx
+                        other.vy -= (impulse_mag / m2) * ny
