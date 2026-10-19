@@ -7,6 +7,7 @@ export function useSimulationSocket(wsUrl: string = 'ws://localhost:8000/api/sim
   const [tps, setTps] = useState<number>(30);
   const [organisms, setOrganisms] = useState<CompactOrganism[]>([]);
   const [foods, setFoods] = useState<CompactFood[]>([]);
+  const [clusters, setClusters] = useState<[number, number][]>([]);
   const [metrics, setMetrics] = useState<WorldMetrics | null>(null);
   const [metricsHistory, setMetricsHistory] = useState<
     Array<{ tick: number; pop: number; food: number; avgEnergy: number }>
@@ -31,6 +32,7 @@ export function useSimulationSocket(wsUrl: string = 'ws://localhost:8000/api/sim
           if (data.tps) setTps(data.tps);
           if (data.orgs) setOrganisms(data.orgs);
           if (data.foods) setFoods(data.foods);
+          if (data.clusters) setClusters(data.clusters);
           if (data.metrics) {
             setMetrics(data.metrics);
             setMetricsHistory((prev) => {
@@ -94,6 +96,7 @@ export function useSimulationSocket(wsUrl: string = 'ws://localhost:8000/api/sim
     tps,
     organisms,
     foods,
+    clusters,
     metrics,
     metricsHistory,
     play,

@@ -33,6 +33,7 @@ export interface SimulationStateMessage {
   t: number;
   orgs: CompactOrganism[];
   foods: CompactFood[];
+  clusters?: [number, number][];
   metrics: WorldMetrics;
   status: 'RUNNING' | 'PAUSED' | 'STOPPED';
   tps: number;

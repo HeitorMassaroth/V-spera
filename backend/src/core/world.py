@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 import math
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Tuple
 from .prng import PRNG
 from .entities.organism import Organism
 from .entities.food import Food
@@ -31,8 +31,11 @@ class World:
         self.seed = seed
         self.food_spawn_rate = float(food_spawn_rate)
         self.max_food = int(max_food)
+        self.food_cluster_count = 4
+        self.food_cluster_radius = 85.0
 
         self.prng = PRNG(seed)
+        self.food_clusters = self._generate_food_clusters(self.food_cluster_count)
         self.tick = 0
         self._next_id = 1
         self._food_accumulator = 0.0
@@ -92,15 +95,45 @@ class World:
         for _ in range(food_count):
             self.spawn_food()
 
+    def _generate_food_clusters(self, count: int) -> List[Tuple[float, float]]:
+        """Gera centros estáticos de fertilidade (oásis) distribuídos pelo ecossistema."""
+        clusters: List[Tuple[float, float]] = []
+        margin_x = min(160.0, self.width * 0.18)
+        margin_y = min(130.0, self.height * 0.18)
+
+        for _ in range(count):
+            cx = self.prng.uniform(margin_x, self.width - margin_x)
+            cy = self.prng.uniform(margin_y, self.height - margin_y)
+            clusters.append((round(cx, 1), round(cy, 1)))
+
+        return clusters
+
     def spawn_food(self) -> Optional[Food]:
-        """Gera um novo recurso alimentar em posição estocástica dentro dos limites."""
+        """Gera alimento concentrado em torno dos centros de recursos (oásis/clusters)."""
         if len(self.foods) >= self.max_food:
             return None
 
         fid = self._next_entity_id()
-        fx = self.prng.uniform(30.0, self.width - 30.0)
-        fy = self.prng.uniform(30.0, self.height - 30.0)
-        food = Food(id=fid, x=fx, y=fy)
+
+        # 85% de probabilidade de nascer concentrado em torno de um dos centros específicos
+        if self.food_clusters and self.prng.random() < 0.85:
+            center_idx = self.prng.randint(0, len(self.food_clusters) - 1)
+            cx, cy = self.food_clusters[center_idx]
+
+            # Concentração Gaussiana: maior densidade no miolo do centro, decaindo para as bordas
+            sigma = self.food_cluster_radius * 0.45
+            fx = self.prng.gauss(cx, sigma)
+            fy = self.prng.gauss(cy, sigma)
+        else:
+            # 15% de esporos pioneiros/esparsos para incentivar exploração
+            fx = self.prng.uniform(30.0, self.width - 30.0)
+            fy = self.prng.uniform(30.0, self.height - 30.0)
+
+        # Salvaguarda de limites
+        fx = max(20.0, min(self.width - 20.0, fx))
+        fy = max(20.0, min(self.height - 20.0, fy))
+
+        food = Food(id=fid, x=round(fx, 1), y=round(fy, 1))
         self.foods[fid] = food
         return food
 
@@ -196,6 +229,7 @@ class World:
             "t": self.tick,
             "orgs": [o.to_compact_dict() for o in self.organisms.values()],
             "foods": [[f.id, round(f.x, 1), round(f.y, 1)] for f in self.foods.values()],
+            "clusters": self.food_clusters,
             "metrics": self.get_metrics(),
         }
 
@@ -209,6 +243,8 @@ class World:
             "height": self.height,
             "food_spawn_rate": self.food_spawn_rate,
             "max_food": self.max_food,
+            "food_clusters": self.food_clusters,
+            "food_cluster_radius": self.food_cluster_radius,
             "next_id": self._next_id,
             "total_births": self.total_births,
             "total_deaths": self.total_deaths,
@@ -235,6 +271,8 @@ class World:
         world.total_births = snapshot["total_births"]
         world.total_deaths = snapshot["total_deaths"]
         world.total_food_consumed = snapshot["total_food_consumed"]
+        world.food_clusters = snapshot.get("food_clusters", world._generate_food_clusters(4))
+        world.food_cluster_radius = snapshot.get("food_cluster_radius", 85.0)
 
         for o_data in snapshot["organisms"]:
             org = Organism.from_dict(o_data)

@@ -6,6 +6,7 @@ import { WorldRenderer, type RenderOptions } from '../canvas/WorldRenderer';
 interface SimulationViewerProps {
   organisms: CompactOrganism[];
   foods: CompactFood[];
+  clusters: [number, number][];
   worldWidth: number;
   worldHeight: number;
   onPlayPauseToggle: () => void;
@@ -16,6 +17,7 @@ interface SimulationViewerProps {
 export const SimulationViewer: React.FC<SimulationViewerProps> = ({
   organisms,
   foods,
+  clusters,
   worldWidth,
   worldHeight,
   onPlayPauseToggle,
@@ -36,10 +38,10 @@ export const SimulationViewer: React.FC<SimulationViewerProps> = ({
   const lastMousePosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
   // Referência para as entidades mais recentes
-  const stateRef = useRef({ organisms, foods, worldWidth, worldHeight });
+  const stateRef = useRef({ organisms, foods, clusters, worldWidth, worldHeight });
   useEffect(() => {
-    stateRef.current = { organisms, foods, worldWidth, worldHeight };
-  }, [organisms, foods, worldWidth, worldHeight]);
+    stateRef.current = { organisms, foods, clusters, worldWidth, worldHeight };
+  }, [organisms, foods, clusters, worldWidth, worldHeight]);
 
   // Inicialização e Resize
   useEffect(() => {
@@ -87,6 +89,7 @@ export const SimulationViewer: React.FC<SimulationViewerProps> = ({
         rendererRef.current.render(
           stateRef.current.organisms,
           stateRef.current.foods,
+          stateRef.current.clusters,
           options,
           rect.width,
           rect.height

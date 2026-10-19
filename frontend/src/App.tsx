@@ -13,6 +13,7 @@ export const App: React.FC = () => {
     tps,
     organisms,
     foods,
+    clusters,
     metrics,
     metricsHistory,
     play,
@@ -89,6 +90,7 @@ export const App: React.FC = () => {
           <SimulationViewer
             organisms={organisms}
             foods={foods}
+            clusters={clusters}
             worldWidth={config.width}
             worldHeight={config.height}
             onPlayPauseToggle={handlePlayPauseToggle}

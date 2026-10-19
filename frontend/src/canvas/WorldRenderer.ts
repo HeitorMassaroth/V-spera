@@ -37,6 +37,7 @@ export class WorldRenderer {
   public render(
     organisms: CompactOrganism[],
     foods: CompactFood[],
+    clusters: [number, number][],
     options: RenderOptions,
     canvasWidth: number,
     canvasHeight: number
@@ -55,12 +56,42 @@ export class WorldRenderer {
     // 1. Limites do ecossistema e grade espacial
     this.renderWorldBoundsAndGrid(ctx, options.worldWidth, options.worldHeight, options.showGridLines);
 
-    // 2. Alimentos (pontos nutritivos com brilho)
+    // 2. Centros férteis / oásis de recursos
+    this.renderFertileOases(ctx, clusters);
+
+    // 3. Alimentos (pontos nutritivos com brilho)
     this.renderFoods(ctx, foods);
 
-    // 3. Organismos vivos
+    // 4. Organismos vivos
     this.renderOrganisms(ctx, organisms, options);
 
+    ctx.restore();
+  }
+
+  private renderFertileOases(ctx: CanvasRenderingContext2D, clusters: [number, number][]) {
+    if (!clusters || clusters.length === 0) return;
+    ctx.save();
+    for (const [cx, cy] of clusters) {
+      // Gradiente radial suave no miolo do centro de recursos
+      const grad = ctx.createRadialGradient(cx, cy, 5, cx, cy, 90);
+      grad.addColorStop(0, 'rgba(16, 185, 129, 0.12)');
+      grad.addColorStop(0.5, 'rgba(16, 185, 129, 0.04)');
+      grad.addColorStop(1, 'rgba(16, 185, 129, 0.0)');
+
+      ctx.beginPath();
+      ctx.arc(cx, cy, 90, 0, Math.PI * 2);
+      ctx.fillStyle = grad;
+      ctx.fill();
+
+      // Círculo sutil delimitador da zona
+      ctx.beginPath();
+      ctx.arc(cx, cy, 90, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(52, 211, 153, 0.18)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 6]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
     ctx.restore();
   }
 
