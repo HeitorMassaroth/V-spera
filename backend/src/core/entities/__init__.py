@@ -6,6 +6,7 @@ from .organism import Organism
 from .nest import Nest
 from .clan import Clan, ClanSocialStage, ClanRelation, ClanPriorityType, calculate_leadership_score
 from .genetics import Genotype, Phenotype, AllelePair, MutationRecord, GeneticsEngine, AnimalGenome, AnimalPersonality
+from .chronicle import EcosystemChronicle, ChronicleEvent, ChronicleEventType
 
 __all__ = [
     "OrganismTraits",
@@ -24,5 +25,8 @@ __all__ = [
     "GeneticsEngine",
     "AnimalGenome",
     "AnimalPersonality",
+    "EcosystemChronicle",
+    "ChronicleEvent",
+    "ChronicleEventType",
 ]
 

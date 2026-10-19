@@ -3,12 +3,13 @@ import {
   Eye,
   Compass,
   Grid,
+  Shield,
   Maximize2,
   Crosshair,
   MousePointer,
   Apple,
 } from 'lucide-react';
-import type { CompactOrganism, CompactFood, AttributeStats, WorldEvent, NestInfo, ClanInfo } from '../types';
+import type { CompactOrganism, CompactFood, AttributeStats, WorldEvent, NestInfo, ClanInfo, TerritoryZoneInfo, SeasonInfo } from '../types';
 import { WorldRenderer, type RenderOptions } from '../canvas/WorldRenderer';
 import { AnimalInspector } from './AnimalInspector';
 
@@ -19,6 +20,8 @@ interface SimulationViewerProps {
   clusterHomes?: Record<number, number>;
   nests?: NestInfo[];
   clans?: ClanInfo[];
+  territories?: TerritoryZoneInfo[];
+  season?: SeasonInfo | null;
   populationAverages?: AttributeStats;
   events?: WorldEvent[];
   tick: number;
@@ -41,6 +44,8 @@ export const SimulationViewer: React.FC<SimulationViewerProps> = ({
   clusterHomes,
   nests,
   clans,
+  territories,
+  season,
   populationAverages,
   events,
   tick,
@@ -67,6 +72,7 @@ export const SimulationViewer: React.FC<SimulationViewerProps> = ({
   const [showSensoryRadius, setShowSensoryRadius] = useState<boolean>(false);
   const [showVelocityVectors, setShowVelocityVectors] = useState<boolean>(true);
   const [showGridLines, setShowGridLines] = useState<boolean>(true);
+  const [showTerritories, setShowTerritories] = useState<boolean>(true);
 
   // Estados de Pan & Zoom
   const isDraggingRef = useRef<boolean>(false);
@@ -81,6 +87,8 @@ export const SimulationViewer: React.FC<SimulationViewerProps> = ({
     clusterHomes,
     nests,
     clans,
+    territories,
+    season,
     worldWidth,
     worldHeight,
     events,
@@ -94,12 +102,14 @@ export const SimulationViewer: React.FC<SimulationViewerProps> = ({
       clusterHomes,
       nests,
       clans,
+      territories,
+      season,
       worldWidth,
       worldHeight,
       events,
       tick,
     };
-  }, [organisms, foods, clusters, clusterHomes, nests, clans, worldWidth, worldHeight, events, tick]);
+  }, [organisms, foods, clusters, clusterHomes, nests, clans, territories, season, worldWidth, worldHeight, events, tick]);
 
   const selectedIdRef = useRef<number | null>(selectedOrganismId);
   useEffect(() => {
@@ -163,6 +173,7 @@ export const SimulationViewer: React.FC<SimulationViewerProps> = ({
           showSensoryRadius,
           showVelocityVectors,
           showGridLines,
+          showTerritories,
           worldWidth: stateRef.current.worldWidth,
           worldHeight: stateRef.current.worldHeight,
         };
@@ -179,7 +190,9 @@ export const SimulationViewer: React.FC<SimulationViewerProps> = ({
           stateRef.current.events,
           stateRef.current.tick,
           stateRef.current.nests,
-          stateRef.current.clans
+          stateRef.current.clans,
+          stateRef.current.territories,
+          stateRef.current.season
         );
       }
       animationFrameId = requestAnimationFrame(renderLoop);
@@ -191,7 +204,7 @@ export const SimulationViewer: React.FC<SimulationViewerProps> = ({
       cancelAnimationFrame(animationFrameId);
       window.removeEventListener('resize', handleResize);
     };
-  }, [showSensoryRadius, showVelocityVectors, showGridLines, worldWidth, worldHeight]);
+  }, [showSensoryRadius, showVelocityVectors, showGridLines, showTerritories, worldWidth, worldHeight]);
 
   // Atalhos de teclado
   useEffect(() => {
@@ -453,6 +466,26 @@ export const SimulationViewer: React.FC<SimulationViewerProps> = ({
           title="Alternar grade espacial"
         >
           <Grid size={12} /> Grade
+        </button>
+
+        <button
+          onClick={() => setShowTerritories(!showTerritories)}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '4px',
+            padding: '4px 8px',
+            borderRadius: '6px',
+            fontSize: '11px',
+            fontWeight: 600,
+            background: showTerritories ? 'rgba(16, 185, 129, 0.2)' : 'transparent',
+            color: showTerritories ? '#34D399' : 'var(--color-text-muted)',
+            border: `1px solid ${showTerritories ? 'rgba(16, 185, 129, 0.4)' : 'transparent'}`,
+            cursor: 'pointer',
+          }}
+          title="Alternar visualização das regiões territoriais e indicadores de qualidade"
+        >
+          <Shield size={12} /> Territórios
         </button>
       </div>
 

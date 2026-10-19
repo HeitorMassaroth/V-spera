@@ -3,7 +3,7 @@
 from __future__ import annotations
 import json
 import logging
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, HTTPException
 from api.schemas.control import ResetParams, SpeedParams, SimulationStatusResponse
 from engine.runner import SimulationRunner
@@ -82,6 +82,7 @@ def create_simulation_router(
                 nest_info = runner.world.family_system.nests[org.nest_id].to_dict()
 
             current_stats = {
+                "species": getattr(org, "species", "Predador"),
                 "age": org.age,
                 "saude": round(org.saude, 1),
                 "energy": round(org.energy, 1),
@@ -103,6 +104,7 @@ def create_simulation_router(
                 "cause_of_death": org.cause_of_death,
                 "clan_id": org.clan_id,
                 "clan_role": org.clan_role,
+                "territory_id": org.territory_id,
                 "leadership_score": calculate_leadership_score(org),
                 "genotype": org.genotype.to_dict(),
                 "phenotype": org.phenotype.to_dict(),
@@ -110,12 +112,14 @@ def create_simulation_router(
                 "inbreeding_coefficient": org.genotype.inbreeding_coefficient,
                 "lineage_id": org.genotype.lineage_id,
                 "lineage_name": org.genotype.lineage_name,
+                "relationships": [rel.to_dict() for rel in org.relationships.values()],
             }
         else:
             rec = runner.world.genealogy.get_record(organism_id)
             if rec:
                 age_at_death = (rec.death_tick - rec.birth_tick) if rec.death_tick is not None else 0
                 current_stats = {
+                    "species": getattr(rec, "species", "Predador"),
                     "age": age_at_death,
                     "saude": 0.0,
                     "energy": 0.0,
@@ -149,15 +153,18 @@ def create_simulation_router(
                     "inbreeding_coefficient": rec.inbreeding_coefficient,
                     "lineage_id": rec.lineage_id,
                     "lineage_name": rec.lineage_name,
+                    "relationships": [],
                 }
 
         metrics = runner.world.get_metrics()
+        organism_chronicle = runner.world.chronicle.get_organism_history(organism_id) if hasattr(runner.world, "chronicle") else []
         return {
             "family_tree": family_tree,
             "is_alive": is_alive,
             "current_stats": current_stats,
             "population_averages": metrics.get("attr_stats", {}),
             "evolution": metrics.get("evolution", {}),
+            "chronicle": organism_chronicle,
         }
 
     @router.get("/evolution", response_model=Dict[str, Any])
@@ -173,7 +180,57 @@ def create_simulation_router(
         clan = runner.world.clan_system.clans.get(clan_id)
         if not clan or not clan.is_active:
             raise HTTPException(status_code=404, detail="Clã não encontrado.")
-        return clan.to_dict()
+        clan_data = clan.to_dict()
+        if hasattr(runner.world, "chronicle"):
+            clan_data["chronicle"] = runner.world.chronicle.get_clan_history(clan_id)
+        return clan_data
+
+    @router.get("/chronicle", response_model=Dict[str, Any])
+    async def get_chronicle(
+        species: Optional[str] = None,
+        organism_id: Optional[int] = None,
+        clan_id: Optional[int] = None,
+        zone_id: Optional[int] = None,
+        event_type: Optional[str] = None,
+        min_importance: int = 1,
+        search: Optional[str] = None,
+        limit: int = 60,
+        offset: int = 0,
+    ):
+        if not hasattr(runner.world, "chronicle"):
+            return {"events": [], "total": 0, "limit": limit, "offset": offset}
+
+        result = runner.world.chronicle.query_timeline(
+            species=species,
+            organism_id=organism_id,
+            clan_id=clan_id,
+            zone_id=zone_id,
+            event_type=event_type,
+            min_importance=min_importance,
+            search=search,
+            limit=limit,
+            offset=offset,
+        )
+        return result
+
+    @router.get("/chronicle/{event_id}", response_model=Dict[str, Any])
+    async def get_chronicle_event(event_id: int):
+        if not hasattr(runner.world, "chronicle"):
+            raise HTTPException(status_code=404, detail="Crônica não disponível.")
+        event = runner.world.chronicle.get_event_by_id(event_id)
+        if not event:
+            raise HTTPException(status_code=404, detail="Evento não encontrado.")
+        related = runner.world.chronicle.get_related_events(event_id)
+        return {
+            "event": event.to_dict(),
+            "related_events": [e.to_dict() for e in related],
+        }
+
+    @router.get("/territories", response_model=List[Dict[str, Any]])
+    async def get_territories():
+        if hasattr(runner.world, "territory_system"):
+            return [z.to_dict() for z in runner.world.territory_system.zones.values()]
+        return []
 
     @router.post("/spawn-food", response_model=Dict[str, Any])
     async def spawn_food_endpoint(params: Dict[str, Any]):

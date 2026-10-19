@@ -142,11 +142,14 @@ class Clan:
     stage: ClanSocialStage = ClanSocialStage.INDEPENDENT
     family_ids: Set[int] = field(default_factory=set)
 
-    # Liderança (Alpha e Beta)
+    # Liderança (Alpha e Beta) e Legitimidade
     alpha_id: Optional[int] = None
     beta_id: Optional[int] = None
     alpha_score: float = 0.0
     beta_score: float = 0.0
+    alpha_approval_rating: float = 100.0  # Taxa de aprovação coletiva dos membros [0.0 - 100.0%]
+    has_legitimacy_crisis: bool = False   # Indica crise de legitimidade (baixa confiança popular)
+    crisis_ticks: int = 0
     last_election_tick: int = 0
 
     # Reserva de Alimentos Coletiva (Economia do Clã)
@@ -208,54 +211,86 @@ class Clan:
         # Não possuir parceiro ativo!
         if organism.partner_id is not None:
             return False
-        # Pertence ao clã
-        if organism.family_id not in self.family_ids:
+        # Pertence ao clã (por clã registrado ou família participante)
+        in_clan = (getattr(organism, "clan_id", None) == self.id) or (organism.family_id in self.family_ids)
+        if not in_clan:
             return False
         return True
 
-    def elect_leaders(self, organisms: Dict[int, Any], current_tick: int, force: bool = False) -> Tuple[Optional[int], Optional[int]]:
+    def elect_leaders(
+        self,
+        organisms: Dict[int, Any],
+        current_tick: int,
+        force: bool = False,
+        election_weights: Optional[Dict[str, float]] = None,
+    ) -> Tuple[Optional[int], Optional[int]]:
         """
-        Elege Alpha e Beta baseando-se estritamente no índice de força individual.
-        Alpha = 1º colocado elegível.
-        Beta = 2º colocado elegível.
-        Devem ser dois indivíduos distintos.
+        Elege Alpha e Beta baseando-se no índice de força biológica, confiança coletiva
+        dos membros e histórico de cooperação, aplicando critérios de legitimidade.
         """
-        # Coleta todos os candidatos elegíveis
-        candidates: List[Tuple[int, float]] = []
+        from .social import calculate_candidate_support
+
+        clan_members = [
+            org for org in organisms.values()
+            if (getattr(org, "clan_id", None) == self.id or getattr(org, "family_id", None) in self.family_ids)
+            and getattr(org, "is_alive", True)
+        ]
+
+        # Avalia aprovação do titular atual se ele estiver vivo e no clã
+        if self.alpha_id is not None and self.alpha_id in organisms:
+            current_alpha_org = organisms[self.alpha_id]
+            if self.is_eligible_for_leadership(current_alpha_org):
+                _, cur_alpha_trust, cur_alpha_approval = calculate_candidate_support(
+                    current_alpha_org, clan_members, weights=election_weights
+                )
+                self.alpha_approval_rating = cur_alpha_approval
+                if cur_alpha_approval < 38.0 or cur_alpha_trust < 0.15:
+                    self.has_legitimacy_crisis = True
+                    self.crisis_ticks += 1
+                else:
+                    self.has_legitimacy_crisis = False
+                    self.crisis_ticks = 0
+
+        # Coleta e pontua todos os candidatos elegíveis com fórmula integrada
+        candidates: List[Tuple[int, float, float]] = []
         for org_id, org in organisms.items():
             if self.is_eligible_for_leadership(org):
-                score = calculate_leadership_score(org)
-                candidates.append((org_id, score))
+                score, avg_t, approval = calculate_candidate_support(
+                    org, clan_members, weights=election_weights
+                )
+                candidates.append((org_id, score, approval))
 
-        # Ordena por índice de força de liderança decrescente
+        # Ordena por índice de liderança integrada decrescente
         candidates.sort(key=lambda x: x[1], reverse=True)
 
         new_alpha: Optional[int] = None
         new_beta: Optional[int] = None
         score_a: float = 0.0
         score_b: float = 0.0
+        approval_a: float = 100.0
 
         if len(candidates) >= 1:
             new_alpha = candidates[0][0]
             score_a = candidates[0][1]
+            approval_a = candidates[0][2]
         if len(candidates) >= 2:
             new_beta = candidates[1][0]
             score_b = candidates[1][1]
 
-        # Mecanismo de estabilidade: só substitui titulares por margem mínima (+3.0 pts) exceto se force=True
-        # ou se o titular se tornou inelegível (morreu, formou casal, adoeceu)
         alpha_valid = self.alpha_id is not None and self.alpha_id in organisms and self.is_eligible_for_leadership(organisms[self.alpha_id])
         beta_valid = self.beta_id is not None and self.beta_id in organisms and self.is_eligible_for_leadership(organisms[self.beta_id])
 
-        # Se Alpha se tornou inválido, Beta assume imediatamente como Alpha se for válido!
+        # Sucessão de emergência quando Alpha se torna inválido
         if not alpha_valid:
             if beta_valid:
-                # Sucessão de emergência: Beta vira Alpha provisório
                 old_beta = self.beta_id
                 self.alpha_id = old_beta
-                self.alpha_score = calculate_leadership_score(organisms[old_beta])
+                b_score, _, b_appr = calculate_candidate_support(organisms[old_beta], clan_members, weights=election_weights)
+                self.alpha_score = b_score
+                self.alpha_approval_rating = b_appr
+                self.has_legitimacy_crisis = False
+                self.crisis_ticks = 0
                 self.log_event("alpha_succession", f"Beta #{old_beta} assumiu a liderança principal como novo Alpha!", current_tick)
-                # Remove o antigo beta dos candidatos para escolher novo beta
                 remaining = [c for c in candidates if c[0] != old_beta]
                 if remaining:
                     self.beta_id = remaining[0][0]
@@ -267,9 +302,11 @@ class Clan:
                 self.last_election_tick = current_tick
                 return self.alpha_id, self.beta_id
             else:
-                # Nenhum é válido, aplica novos eleitos diretamente
                 self.alpha_id = new_alpha
                 self.alpha_score = score_a
+                self.alpha_approval_rating = approval_a
+                self.has_legitimacy_crisis = False
+                self.crisis_ticks = 0
                 self.beta_id = new_beta
                 self.beta_score = score_b
                 self.last_election_tick = current_tick
@@ -280,19 +317,31 @@ class Clan:
                 return self.alpha_id, self.beta_id
 
         # Se Alpha continua válido
-        if force or (new_alpha and new_alpha != self.alpha_id and score_a > (self.alpha_score + 3.0)):
+        # Se houver crise de legitimidade, a margem de proteção é zerada!
+        required_margin = 0.5 if self.has_legitimacy_crisis else 3.0
+        if force or (new_alpha and new_alpha != self.alpha_id and score_a > (self.alpha_score + required_margin)):
+            old_alpha_id = self.alpha_id
             self.alpha_id = new_alpha
             self.alpha_score = score_a
-            self.log_event("alpha_elected", f"Alpha #{new_alpha} superou o titular e assumiu a liderança (Score {score_a:.1f})", current_tick)
+            self.alpha_approval_rating = approval_a
+            if self.has_legitimacy_crisis:
+                self.log_event(
+                    "alpha_deposed",
+                    f"Alpha #{old_alpha_id} perdeu o apoio dos membros (Aprovação < 40%) e foi destituído por #{new_alpha} (Score {score_a:.1f})!",
+                    current_tick,
+                )
+                self.has_legitimacy_crisis = False
+                self.crisis_ticks = 0
+            else:
+                self.log_event("alpha_elected", f"Alpha #{new_alpha} superou o titular e assumiu a liderança (Score {score_a:.1f})", current_tick)
 
-        # Se Beta precisa de renovação
+        # Atualização do Beta
         if not beta_valid or force or (new_beta and new_beta != self.beta_id and score_b > (self.beta_score + 3.0) and new_beta != self.alpha_id):
-            # Beta não pode ser o mesmo que o Alpha
             valid_betas = [c for c in candidates if c[0] != self.alpha_id]
             if valid_betas:
                 self.beta_id = valid_betas[0][0]
                 self.beta_score = valid_betas[0][1]
-                self.log_event("beta_elected", f"Beta #{self.beta_id} estabelecido no cargo (Score {self.beta_score:.1f})", current_tick)
+                self.log_event("beta_elected", f"Novo Beta #{self.beta_id} eleito com score {self.beta_score:.1f}", current_tick)
             else:
                 self.beta_id = None
                 self.beta_score = 0.0
@@ -331,6 +380,9 @@ class Clan:
             "beta_id": self.beta_id,
             "alpha_score": self.alpha_score,
             "beta_score": self.beta_score,
+            "alpha_approval_rating": round(self.alpha_approval_rating, 1),
+            "has_legitimacy_crisis": self.has_legitimacy_crisis,
+            "crisis_ticks": self.crisis_ticks,
             "communal_food": round(self.communal_food, 1),
             "total_food_contributed": round(self.total_food_contributed, 1),
             "total_food_consumed": round(self.total_food_consumed, 1),

@@ -276,11 +276,16 @@ class ClanSystem:
             if not clan.is_active or clan.stage != ClanSocialStage.ESTABLISHED_CLAN:
                 continue
 
-            # Verifica se os titulares continuam válidos
+            # Verifica se os titulares continuam válidos ou se há crise de legitimidade
             alpha_valid = clan.alpha_id is not None and clan.alpha_id in organisms and clan.is_eligible_for_leadership(organisms[clan.alpha_id])
             beta_valid = clan.beta_id is not None and clan.beta_id in organisms and clan.is_eligible_for_leadership(organisms[clan.beta_id])
 
-            needs_election = not alpha_valid or not beta_valid or ((tick - clan.last_election_tick) >= self.election_interval)
+            needs_election = (
+                not alpha_valid or
+                not beta_valid or
+                clan.has_legitimacy_crisis or
+                ((tick - clan.last_election_tick) >= self.election_interval)
+            )
 
             if needs_election:
                 old_alpha = clan.alpha_id
@@ -308,6 +313,8 @@ class ClanSystem:
                         "leader_id": clan.alpha_id,
                         "leader_name": leader_org.name if leader_org else f"Animal#{clan.alpha_id}",
                         "score": clan.alpha_score,
+                        "approval_rating": clan.alpha_approval_rating,
+                        "has_crisis": clan.has_legitimacy_crisis,
                         "tick": tick,
                     })
 
@@ -322,6 +329,31 @@ class ClanSystem:
                         "score": clan.beta_score,
                         "tick": tick,
                     })
+
+            # Avalia deserção voluntária de predadores descontentes que rejeitam a liderança Alpha
+            if clan.alpha_id is not None and len(clan.family_ids) > 2:
+                for org in list(organisms.values()):
+                    if (
+                        org.alive
+                        and org.clan_id == clan.id
+                        and org.clan_role == "MEMBRO"
+                        and getattr(org, "species", Organism.SPECIES_PREDATOR) == Organism.SPECIES_PREDATOR
+                    ):
+                        rel_alpha = org.relationships.get(clan.alpha_id)
+                        if rel_alpha and rel_alpha.trust < -0.40 and rel_alpha.hostility > 0.40:
+                            org.clan_id = None
+                            org.clan_role = None
+                            org.update_social_interaction(clan.alpha_id, "DESERTION", intensity=0.75, tick=tick, target_name=f"Ex-Líder#{clan.alpha_id}")
+                            clan.log_event("clan_desertion", f"{org.name} desertou do {clan.name} por profunda desconfiança e rejeição à liderança do Alpha!", tick)
+                            events.append({
+                                "type": "clan_desertion",
+                                "clan_id": clan.id,
+                                "clan_name": clan.name,
+                                "organism_id": org.id,
+                                "organism_name": org.name,
+                                "reason": "Rejeição e desconfiança extrema em relação ao líder Alpha",
+                                "tick": tick,
+                            })
 
     # -------------------------------------------------------------------------
     # 3. ECONOMIA COLETIVA & RESERVA DE ALIMENTOS
@@ -351,6 +383,9 @@ class ClanSystem:
                         if donation > 1.0:
                             org.carried_food -= donation
                             clan.add_communal_food(donation, org.family_id or 0)
+                            if clan.alpha_id is not None and clan.alpha_id in organisms:
+                                org.update_social_interaction(clan.alpha_id, "RESOURCE_SHARING", intensity=0.5, tick=tick, target_name=organisms[clan.alpha_id].name)
+                                organisms[clan.alpha_id].update_social_interaction(org.id, "RESOURCE_SHARING", intensity=0.4, tick=tick, target_name=org.name)
 
             # Se a reserva tem comida suficiente (> 25 kcal), socorre ninhos famintos do clã
             if clan.communal_food >= 25.0:
@@ -365,6 +400,10 @@ class ClanSystem:
                         if aid > 0.0:
                             nest.add_food(aid)
                             clan.log_event("communal_aid", f"Reserva do clã repassou {aid:.1f} kcal ao ninho faminto da Família #{fid}", tick)
+                            if clan.alpha_id is not None:
+                                p_id = getattr(fam, "patriarch_id", None) or getattr(fam, "matriarch_id", None)
+                                if p_id and p_id in organisms:
+                                    organisms[p_id].update_social_interaction(clan.alpha_id, "HELP_RECEIVED", intensity=0.7, tick=tick, target_name="Líder Alpha")
 
     # -------------------------------------------------------------------------
     # 4. PRIORIDADES ESTRATÉGICAS DEFINIDAS POR ALPHA & BETA
@@ -467,6 +506,11 @@ class ClanSystem:
             if not clan.is_active or len(clan.family_ids) <= 3:
                 continue
 
+            # Clãs de Vrancos são puramente altruístas e solidários: não expulsam famílias
+            clan_orgs = [o for o in organisms.values() if o.clan_id == clan.id]
+            if any(getattr(o, "species", Organism.SPECIES_PREDATOR) == Organism.SPECIES_VRANCO for o in clan_orgs):
+                continue
+
             for fid in list(clan.family_ids):
                 contrib = clan.family_contributions.get(fid, 0.0)
                 consump = clan.family_consumptions.get(fid, 0.0)
@@ -477,11 +521,25 @@ class ClanSystem:
                     clan.family_ids.remove(fid)
                     clan.log_event("family_expelled", f"Família #{fid} foi expulsa do clã por parasitismo crônico de recursos!", tick)
 
-                    # Desvincula organismos da família expulsa
+                    # Desvincula organismos da família expulsa e registra memória episódica e relações sociais
                     for org in organisms.values():
                         if org.family_id == fid:
                             org.clan_id = None
                             org.clan_role = None
+                            if clan.alpha_id is not None:
+                                org.update_social_interaction(clan.alpha_id, "EXPULSION", intensity=0.85, tick=tick, target_name=f"Líder Alpha#{clan.alpha_id}")
+                            if getattr(org, "memory", None):
+                                org.memory.add_episode(
+                                    event_type="EXPELLED",
+                                    description=f"Expulso do {clan.name}",
+                                    tick=tick,
+                                    x=org.x,
+                                    y=org.y,
+                                    intensity=0.85,
+                                    relevance=0.9,
+                                    involved_id=clan.alpha_id or 0,
+                                    involved_name=clan.name,
+                                )
 
                     events.append({
                         "type": "family_expelled",
@@ -546,6 +604,18 @@ class ClanSystem:
                         c1.diplomacy[c2.id] = ClanRelation.NEUTRAL
                         c2.diplomacy[c1.id] = ClanRelation.NEUTRAL
                         c1.log_event("clan_truce_ended", f"Trégua com {c2.name} expirou. Relações normalizadas.", tick)
+                    continue
+
+                # Verifica se ambos os clãs pertencem à raça Vrancos
+                c1_orgs = [o for o in organisms.values() if o.clan_id == c1.id]
+                c2_orgs = [o for o in organisms.values() if o.clan_id == c2.id]
+                c1_is_vranco = any(getattr(o, "species", Organism.SPECIES_PREDATOR) == Organism.SPECIES_VRANCO for o in c1_orgs)
+                c2_is_vranco = any(getattr(o, "species", Organism.SPECIES_PREDATOR) == Organism.SPECIES_VRANCO for o in c2_orgs)
+
+                if c1_is_vranco and c2_is_vranco:
+                    # Entre clãs Vrancos vigora solidariedade permanente e cooperação mútua
+                    c1.diplomacy[c2.id] = ClanRelation.COOPERATION
+                    c2.diplomacy[c1.id] = ClanRelation.COOPERATION
                     continue
 
                 # Se territórios se sobrepõem e há disputa por recursos

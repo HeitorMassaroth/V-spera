@@ -18,6 +18,9 @@ export const App: React.FC = () => {
     families,
     nests,
     clans,
+    territories,
+    season,
+    ecology,
     metrics,
     events,
     metricsHistory,
@@ -84,6 +87,7 @@ export const App: React.FC = () => {
         tps={tps}
         tick={metrics?.tick ?? 0}
         isExtinct={metrics?.is_extinct ?? false}
+        season={season ?? metrics?.season}
         onPlay={play}
         onPause={pause}
         onStep={step}
@@ -102,6 +106,8 @@ export const App: React.FC = () => {
             clusterHomes={clusterHomes}
             nests={nests}
             clans={clans}
+            territories={territories}
+            season={season ?? metrics?.season}
             populationAverages={metrics?.attr_stats}
             events={events}
             tick={metrics?.tick ?? 0}
@@ -120,11 +126,14 @@ export const App: React.FC = () => {
 
         <MetricsPanel
           metrics={metrics}
+          season={season ?? metrics?.season}
+          ecology={ecology ?? metrics?.ecology}
           events={events}
           organisms={organisms}
           families={families}
           nests={nests}
           clans={clans}
+          territories={territories}
           history={metricsHistory}
           onSelectOrganism={setSelectedOrganismId}
         />

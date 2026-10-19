@@ -8,6 +8,9 @@ import type {
   FamilyInfo,
   NestInfo,
   ClanInfo,
+  TerritoryZoneInfo,
+  SeasonInfo,
+  EcologyMetrics,
 } from '../types';
 
 export function useSimulationSocket(wsUrl: string = 'ws://localhost:8000/api/simulation/ws') {
@@ -21,6 +24,9 @@ export function useSimulationSocket(wsUrl: string = 'ws://localhost:8000/api/sim
   const [families, setFamilies] = useState<FamilyInfo[]>([]);
   const [nests, setNests] = useState<NestInfo[]>([]);
   const [clans, setClans] = useState<ClanInfo[]>([]);
+  const [territories, setTerritories] = useState<TerritoryZoneInfo[]>([]);
+  const [season, setSeason] = useState<SeasonInfo | null>(null);
+  const [ecology, setEcology] = useState<EcologyMetrics | null>(null);
   const [metrics, setMetrics] = useState<WorldMetrics | null>(null);
   const [events, setEvents] = useState<WorldEvent[]>([]);
   const [metricsHistory, setMetricsHistory] = useState<
@@ -51,6 +57,11 @@ export function useSimulationSocket(wsUrl: string = 'ws://localhost:8000/api/sim
           if (data.families) setFamilies(data.families);
           if (data.nests) setNests(data.nests);
           if (data.clans) setClans(data.clans);
+          if (data.territories) setTerritories(data.territories);
+          if (data.season) setSeason(data.season);
+          else if (data.metrics?.season) setSeason(data.metrics.season);
+          if (data.ecology) setEcology(data.ecology);
+          else if (data.metrics?.ecology) setEcology(data.metrics.ecology);
           if (data.events && data.events.length > 0) {
             setEvents((prev) => {
               const combined = [...prev, ...(data.events || [])];
@@ -124,6 +135,9 @@ export function useSimulationSocket(wsUrl: string = 'ws://localhost:8000/api/sim
     families,
     nests,
     clans,
+    territories,
+    season,
+    ecology,
     metrics,
     events,
     metricsHistory,

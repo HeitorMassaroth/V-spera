@@ -131,8 +131,71 @@ class Genotype:
 
     # Metadados populacionais e consanguinidade
     inbreeding_coefficient: float = 0.0
-    lineage_id: int = 1
+    lineage_id: Any = 1
     lineage_name: str = "Pioneira"
+
+    def __init__(
+        self,
+        forca_pair: Optional[AllelePair] = None,
+        velocidade_pair: Optional[AllelePair] = None,
+        resistencia_pair: Optional[AllelePair] = None,
+        eficiencia_metabolica_pair: Optional[AllelePair] = None,
+        eficiencia_coleta_pair: Optional[AllelePair] = None,
+        deteccao_ameacas_pair: Optional[AllelePair] = None,
+        resistencia_doencas_pair: Optional[AllelePair] = None,
+        fertilidade_pair: Optional[AllelePair] = None,
+        longevidade_potencial_pair: Optional[AllelePair] = None,
+        adaptabilidade_pair: Optional[AllelePair] = None,
+        sociabilidade_pair: Optional[AllelePair] = None,
+        agressividade_pair: Optional[AllelePair] = None,
+        cautela_pair: Optional[AllelePair] = None,
+        instinto_protecao_pair: Optional[AllelePair] = None,
+        inbreeding_coefficient: float = 0.0,
+        lineage_id: Any = 1,
+        lineage_name: str = "Pioneira",
+        forca: Optional[float] = None,
+        velocidade: Optional[float] = None,
+        resistencia: Optional[float] = None,
+        inteligencia: Optional[float] = None,
+        max_saude: Optional[float] = None,
+        eficiencia_metabolica: Optional[float] = None,
+        eficiencia_coleta: Optional[float] = None,
+        deteccao_ameacas: Optional[float] = None,
+        resistencia_doencas: Optional[float] = None,
+        fertilidade: Optional[float] = None,
+        longevidade_potencial: Optional[float] = None,
+        adaptabilidade: Optional[float] = None,
+        sociabilidade: Optional[float] = None,
+        agressividade: Optional[float] = None,
+        cautela: Optional[float] = None,
+        instinto_protecao: Optional[float] = None,
+        **kwargs: Any,
+    ) -> None:
+        def to_pair(pair_val: Optional[AllelePair], num_val: Optional[float], default_val: float) -> AllelePair:
+            if pair_val is not None:
+                return pair_val
+            v = float(num_val) if num_val is not None else default_val
+            return AllelePair(v, v)
+
+        self.forca_pair = to_pair(forca_pair, forca, 50.0)
+        self.velocidade_pair = to_pair(velocidade_pair, velocidade, 50.0)
+        self.resistencia_pair = to_pair(resistencia_pair, resistencia, 50.0)
+        self.eficiencia_metabolica_pair = to_pair(eficiencia_metabolica_pair, eficiencia_metabolica, 1.0)
+        self.eficiencia_coleta_pair = to_pair(eficiencia_coleta_pair, eficiencia_coleta, 1.0)
+        det = deteccao_ameacas if deteccao_ameacas is not None else inteligencia
+        self.deteccao_ameacas_pair = to_pair(deteccao_ameacas_pair, det, 50.0)
+        self.resistencia_doencas_pair = to_pair(resistencia_doencas_pair, resistencia_doencas, 50.0)
+        self.fertilidade_pair = to_pair(fertilidade_pair, fertilidade, 1.0)
+        self.longevidade_potencial_pair = to_pair(longevidade_potencial_pair, longevidade_potencial, 1800.0)
+        self.adaptabilidade_pair = to_pair(adaptabilidade_pair, adaptabilidade, 50.0)
+        self.sociabilidade_pair = to_pair(sociabilidade_pair, sociabilidade, 0.50)
+        self.agressividade_pair = to_pair(agressividade_pair, agressividade, 0.50)
+        self.cautela_pair = to_pair(cautela_pair, cautela, 0.50)
+        self.instinto_protecao_pair = to_pair(instinto_protecao_pair, instinto_protecao, 0.50)
+
+        self.inbreeding_coefficient = float(inbreeding_coefficient)
+        self.lineage_id = lineage_id
+        self.lineage_name = str(lineage_name)
 
     # Propriedades de conveniência e compatibilidade direta
     @property
@@ -246,6 +309,7 @@ class Genotype:
             "heterozygosity": round(self.average_heterozygosity, 3),
             "lineage_id": self.lineage_id,
             "lineage_name": self.lineage_name,
+            "pairs": {k: v.to_dict() for k, v in self.get_pairs().items()},
         }
 
     def to_detailed_dict(self) -> Dict[str, Any]:
@@ -294,24 +358,37 @@ AnimalGenome = Genotype
 
 @dataclass
 class AnimalPersonality:
-    """Perfil comportamental complementar para compatibilidade com sistemas legados."""
+    """Perfil comportamental individual que modula decisões de movimento, combate, exploração e cooperação."""
 
-    agressividade: float = 0.50
-    sociabilidade: float = 0.50
-    cautela: float = 0.50
-    curiosidade: float = 0.50
-    instinto_protecao: float = 0.50
-    eficiencia_coleta: float = 1.00
-    exploracao: float = 1.00
-    fertilidade: float = 1.00
+    coragem: float = 0.50           # Disposição para enfrentar perigos e predadores [0.0, 1.0]
+    agressividade: float = 0.50     # Tendência a iniciar confrontos ou atacar presas [0.0, 1.0]
+    sociabilidade: float = 0.50     # Preferência por permanecer próximo a indivíduos da mesma espécie [0.0, 1.0]
+    curiosidade: float = 0.50       # Disposição para explorar regiões desconhecidas [0.0, 1.0]
+    cautela: float = 0.50           # Tendência a evitar riscos, zonas de perigo e recuar de ameaças [0.0, 1.0]
+    protecao: float = 0.50          # Tendência a defender filhotes e prestar auxílio comunitário [0.0, 1.0]
+    persistencia: float = 0.50      # Disposição para manter atividade/meta apesar de dificuldades [0.0, 1.0]
+    instinto_protecao: float = 0.50 # Alias para compatibilidade
+    eficiencia_coleta: float = 1.00 # Modulador metabólico de absorção
+    exploracao: float = 1.00        # Modulador de raio de vagueio
+    fertilidade: float = 1.00       # Modulador reprodutivo
+
+    def __post_init__(self) -> None:
+        # Sincroniza protecao e instinto_protecao
+        if self.protecao != 0.50 and self.instinto_protecao == 0.50:
+            self.instinto_protecao = self.protecao
+        elif self.instinto_protecao != 0.50 and self.protecao == 0.50:
+            self.protecao = self.instinto_protecao
 
     def to_dict(self) -> Dict[str, float]:
         return {
+            "coragem": round(self.coragem, 2),
             "agressividade": round(self.agressividade, 2),
             "sociabilidade": round(self.sociabilidade, 2),
-            "cautela": round(self.cautela, 2),
             "curiosidade": round(self.curiosidade, 2),
+            "cautela": round(self.cautela, 2),
+            "protecao": round(self.protecao, 2),
             "instinto_protecao": round(self.instinto_protecao, 2),
+            "persistencia": round(self.persistencia, 2),
             "eficiencia_coleta": round(self.eficiencia_coleta, 2),
             "exploracao": round(self.exploracao, 2),
             "fertilidade": round(self.fertilidade, 2),
@@ -319,12 +396,16 @@ class AnimalPersonality:
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> AnimalPersonality:
+        prot = float(data.get("protecao", data.get("instinto_protecao", 0.50)))
         return cls(
+            coragem=float(data.get("coragem", 0.50)),
             agressividade=float(data.get("agressividade", 0.50)),
             sociabilidade=float(data.get("sociabilidade", 0.50)),
             cautela=float(data.get("cautela", 0.50)),
             curiosidade=float(data.get("curiosidade", 0.50)),
-            instinto_protecao=float(data.get("instinto_protecao", 0.50)),
+            protecao=prot,
+            instinto_protecao=prot,
+            persistencia=float(data.get("persistencia", 0.50)),
             eficiencia_coleta=float(data.get("eficiencia_coleta", 1.00)),
             exploracao=float(data.get("exploracao", 1.00)),
             fertilidade=float(data.get("fertilidade", 1.00)),
@@ -355,6 +436,34 @@ class Phenotype:
     ontogeny_factor: float
     health_factor: float
     inbreeding_penalty: float
+
+    @property
+    def forca_muscular(self) -> float:
+        return self.forca
+
+    @property
+    def resistencia_fisica(self) -> float:
+        return self.resistencia
+
+    @property
+    def capacidade_deteccao(self) -> float:
+        return self.deteccao_ameacas
+
+    @property
+    def tendencia_sociabilidade(self) -> float:
+        return self.sociabilidade
+
+    @property
+    def tendencia_agressividade(self) -> float:
+        return self.agressividade
+
+    @property
+    def cautela_riscos(self) -> float:
+        return self.cautela
+
+    @property
+    def instinto_protecao_parental(self) -> float:
+        return self.instinto_protecao
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -450,6 +559,13 @@ class Phenotype:
         )
 
 
+VRANCO_NAME_PREFIXES = [
+    "Vran", "Kael", "Zeph", "Mira", "Sora", "Elor", "Thal", "Phaea",
+    "Orin", "Cael", "Liri", "Neva", "Brio", "Ziva", "Aven", "Tavi",
+    "Fael", "Ravi", "Jori", "Kiri", "Coro", "Sael", "Vael", "Ilos"
+]
+
+
 class GeneticsEngine:
     """Motor evolutivo de herança alélica mendeliana, recombinação e mutações estocásticas."""
 
@@ -465,15 +581,43 @@ class GeneticsEngine:
         prng: PRNG,
         lineage_id: int = 1,
         lineage_name: Optional[str] = None,
+        is_vranco: bool = False,
     ) -> Genotype:
         """Gera genótipo inicial equilibrado para organismos pioneiros (Geração 0)."""
         if not lineage_name:
-            lineage_name = f"Linhagem {NAME_PREFIXES[lineage_id % len(NAME_PREFIXES)]}"
+            if is_vranco:
+                lineage_name = f"Tribo Vranco {VRANCO_NAME_PREFIXES[lineage_id % len(VRANCO_NAME_PREFIXES)]}"
+            else:
+                lineage_name = f"Linhagem {NAME_PREFIXES[lineage_id % len(NAME_PREFIXES)]}"
 
         def pair(low: float, high: float) -> AllelePair:
             m = round(prng.uniform(low, high), 2)
             p = round(prng.uniform(low, high), 2)
             return AllelePair(m, p)
+
+        if is_vranco:
+            # Identidade Biológica dos Vrancos:
+            # Mais rápidos, sentidos aguçados, alta sociabilidade, cautela e coesão defensiva;
+            # Mais frágeis, menor força individual e ausência de agressividade interna.
+            return Genotype(
+                forca_pair=pair(20.0, 42.0),
+                velocidade_pair=pair(55.0, 85.0),
+                resistencia_pair=pair(22.0, 48.0),
+                eficiencia_metabolica_pair=pair(0.90, 1.40),
+                eficiencia_coleta_pair=pair(0.90, 1.35),
+                deteccao_ameacas_pair=pair(60.0, 95.0),
+                resistencia_doencas_pair=pair(35.0, 65.0),
+                fertilidade_pair=pair(0.90, 1.35),
+                longevidade_potencial_pair=pair(1400.0, 2100.0),
+                adaptabilidade_pair=pair(40.0, 75.0),
+                sociabilidade_pair=pair(0.65, 0.95),
+                agressividade_pair=pair(0.05, 0.22),
+                cautela_pair=pair(0.55, 0.92),
+                instinto_protecao_pair=pair(0.55, 0.90),
+                inbreeding_coefficient=0.0,
+                lineage_id=lineage_id,
+                lineage_name=lineage_name,
+            )
 
         return Genotype(
             forca_pair=pair(35.0, 65.0),
@@ -496,19 +640,48 @@ class GeneticsEngine:
         )
 
     @classmethod
-    def generate_random_genome(cls, prng: PRNG) -> Genotype:
+    def generate_random_genome(cls, prng: PRNG, is_vranco: bool = False) -> Genotype:
         """Compatibilidade retroativa com a API legada."""
-        return cls.generate_random_genotype(prng)
+        return cls.generate_random_genotype(prng, is_vranco=is_vranco)
 
     @classmethod
-    def generate_random_personality(cls, prng: PRNG) -> AnimalPersonality:
-        """Compatibilidade retroativa com a API legada."""
+    def generate_random_personality(
+        cls,
+        prng: PRNG,
+        is_vranco: bool = False,
+        genome: Optional[Genotype] = None,
+    ) -> AnimalPersonality:
+        """Gera perfil comportamental individual influenciado parcialmente pela genética e espécie, com variações estocásticas."""
+        # Influência genética sutil (se genoma fornecido):
+        f_bonus = ((genome.forca - 50.0) / 150.0) if genome else 0.0
+        i_bonus = ((genome.inteligencia - 50.0) / 150.0) if genome else 0.0
+        r_bonus = ((genome.resistencia - 50.0) / 150.0) if genome else 0.0
+
+        clamp = lambda val: max(0.05, min(0.95, round(val, 2)))
+
+        if is_vranco:
+            return AnimalPersonality(
+                coragem=clamp(prng.uniform(0.15, 0.40) + f_bonus * 0.4),
+                agressividade=clamp(prng.uniform(0.05, 0.20)),
+                sociabilidade=clamp(prng.uniform(0.70, 0.98)),
+                curiosidade=clamp(prng.uniform(0.40, 0.85) + i_bonus * 0.5),
+                cautela=clamp(prng.uniform(0.60, 0.95) + i_bonus * 0.3),
+                protecao=clamp(prng.uniform(0.65, 0.95)),
+                instinto_protecao=clamp(prng.uniform(0.65, 0.95)),
+                persistencia=clamp(prng.uniform(0.40, 0.80) + r_bonus * 0.5),
+                eficiencia_coleta=round(prng.uniform(0.90, 1.35), 2),
+                exploracao=round(prng.uniform(0.60, 1.10), 2),
+                fertilidade=round(prng.uniform(0.90, 1.35), 2),
+            )
         return AnimalPersonality(
-            agressividade=round(prng.uniform(0.20, 0.80), 2),
-            sociabilidade=round(prng.uniform(0.20, 0.80), 2),
-            cautela=round(prng.uniform(0.20, 0.80), 2),
-            curiosidade=round(prng.uniform(0.20, 0.80), 2),
-            instinto_protecao=round(prng.uniform(0.25, 0.85), 2),
+            coragem=clamp(prng.uniform(0.45, 0.90) + f_bonus * 0.6),
+            agressividade=clamp(prng.uniform(0.35, 0.85) + f_bonus * 0.5),
+            sociabilidade=clamp(prng.uniform(0.20, 0.70)),
+            curiosidade=clamp(prng.uniform(0.25, 0.75) + i_bonus * 0.5),
+            cautela=clamp(prng.uniform(0.20, 0.65) - f_bonus * 0.3),
+            protecao=clamp(prng.uniform(0.45, 0.85)),
+            instinto_protecao=clamp(prng.uniform(0.45, 0.85)),
+            persistencia=clamp(prng.uniform(0.50, 0.90) + r_bonus * 0.5),
             eficiencia_coleta=round(prng.uniform(0.80, 1.25), 2),
             exploracao=round(prng.uniform(0.80, 1.25), 2),
             fertilidade=round(prng.uniform(0.80, 1.25), 2),
@@ -520,18 +693,30 @@ class GeneticsEngine:
         father_p: AnimalPersonality,
         mother_p: AnimalPersonality,
         prng: PRNG,
+        child_genome: Optional[Genotype] = None,
     ) -> Tuple[AnimalPersonality, List[MutationRecord]]:
-        """Compatibilidade retroativa."""
+        """Recombina personalidades parentais com variação individual e influência ontogenética."""
         f_dict = father_p.to_dict()
         m_dict = mother_p.to_dict()
         res_dict: Dict[str, float] = {}
-        for t in f_dict:
-            res_dict[t] = round((f_dict[t] + m_dict[t]) / 2.0, 2)
+
+        for trait in f_dict:
+            midparent = (f_dict[trait] + m_dict[trait]) / 2.0
+            # Variação individual própria que diferencia o filhote de seus progenitores
+            noise = prng.uniform(-0.10, 0.10)
+            if trait in ("eficiencia_coleta", "exploracao", "fertilidade"):
+                res_dict[trait] = max(0.5, min(2.0, round(midparent + noise * 0.5, 2)))
+            else:
+                res_dict[trait] = max(0.05, min(0.95, round(midparent + noise, 2)))
+
         return AnimalPersonality.from_dict(res_dict), []
 
     @classmethod
-    def generate_name(cls, prefix_idx: int, generation: int, entity_id: int) -> str:
-        """Gera nome individual sistemático (ex: Lyra-G2#18)."""
+    def generate_name(cls, prefix_idx: int, generation: int, entity_id: int, is_vranco: bool = False) -> str:
+        """Gera nome individual sistemático (ex: Vranco-Mira-G2#18 ou Lyra-G2#18)."""
+        if is_vranco:
+            prefix = VRANCO_NAME_PREFIXES[prefix_idx % len(VRANCO_NAME_PREFIXES)]
+            return f"Vranco-{prefix}-G{generation}#{entity_id}"
         prefix = NAME_PREFIXES[prefix_idx % len(NAME_PREFIXES)]
         return f"{prefix}-G{generation}#{entity_id}"
 
@@ -540,14 +725,27 @@ class GeneticsEngine:
         cls,
         father: Genotype,
         mother: Genotype,
-        inbreeding_coef: float,
-        population_averages: Dict[str, float],
-        prng: PRNG,
+        inbreeding_coef: float = 0.0,
+        population_averages: Optional[Dict[str, float]] = None,
+        prng: Optional[PRNG] = None,
+        *,
+        inbreeding_coefficient: Optional[float] = None,
+        pop_averages: Optional[Dict[str, float]] = None,
     ) -> Tuple[Genotype, List[MutationRecord], List[Dict[str, Any]]]:
         """
         Executa segregação mendeliana de 2 alelos por traço, recombinação,
         avaliação estocástica de mutações e efeitos de endogamia.
         """
+        if inbreeding_coefficient is not None:
+            inbreeding_coef = inbreeding_coefficient
+        if pop_averages is not None:
+            population_averages = pop_averages
+        if population_averages is None:
+            population_averages = {}
+        if prng is None:
+            from ..prng import PRNG
+            prng = PRNG(42)
+
         f_pairs = father.get_pairs()
         m_pairs = mother.get_pairs()
 

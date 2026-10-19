@@ -1,5 +1,18 @@
-import React, { useState } from 'react';
-import type { WorldMetrics, WorldEvent, CompactOrganism, FamilyInfo, NestInfo, ClanInfo } from '../types';
+import React, { useState, useEffect, useCallback } from 'react';
+import type {
+  WorldMetrics,
+  WorldEvent,
+  CompactOrganism,
+  FamilyInfo,
+  NestInfo,
+  ClanInfo,
+  TerritoryZoneInfo,
+  SeasonInfo,
+  EcologyMetrics,
+  ChronicleEvent,
+  ChronicleTimelineResponse,
+  ChronicleEventDetailResponse,
+} from '../types';
 import { getClanName } from '../types';
 import {
   Users,
@@ -11,31 +24,106 @@ import {
   Radio,
   ChevronRight,
   Crown,
+  Shield,
+  BookOpen,
+  Search,
+  Clock,
+  RefreshCw,
+  ArrowRight,
+  CornerDownRight,
+  X,
 } from 'lucide-react';
 
 interface MetricsPanelProps {
   metrics: WorldMetrics | null;
+  season?: SeasonInfo | null;
+  ecology?: EcologyMetrics | null;
   events: WorldEvent[];
   organisms: CompactOrganism[];
   families?: FamilyInfo[];
   nests?: NestInfo[];
   clans?: ClanInfo[];
+  territories?: TerritoryZoneInfo[];
   history: Array<{ tick: number; pop: number; food: number; avgEnergy: number }>;
   onSelectOrganism: (id: number) => void;
 }
 
 export const MetricsPanel: React.FC<MetricsPanelProps> = ({
   metrics,
+  season,
+  ecology,
   events,
   organisms,
   families = [],
   nests = [],
   clans = [],
+  territories = [],
   history,
   onSelectOrganism,
 }) => {
-  const [activeTab, setActiveTab] = useState<'overview' | 'clans' | 'battles' | 'inhabitants'>('overview');
-  const [inhabitantFilter, setInhabitantFilter] = useState<'all' | 'F' | 'M' | 'C'>('all');
+  const currentSeason = season ?? metrics?.season;
+  const currentEcology = ecology ?? metrics?.ecology;
+  const [activeTab, setActiveTab] = useState<'overview' | 'territories' | 'clans' | 'chronicle' | 'evolution' | 'battles' | 'inhabitants'>('overview');
+  const [inhabitantFilter, setInhabitantFilter] = useState<'all' | 'V' | 'P' | 'F' | 'M' | 'C'>('all');
+
+  // Estados da Crônica Histórica Centralizada
+  const [chronicleEvents, setChronicleEvents] = useState<ChronicleEvent[]>([]);
+  const [chronicleTotal, setChronicleTotal] = useState<number>(0);
+  const [chronicleSpecies, setChronicleSpecies] = useState<string>('all');
+  const [chronicleCategory, setChronicleCategory] = useState<string>('all');
+  const [chronicleClan, setChronicleClan] = useState<string>('all');
+  const [chronicleImportance, setChronicleImportance] = useState<number>(1);
+  const [chronicleSearch, setChronicleSearch] = useState<string>('');
+  const [chronicleLoading, setChronicleLoading] = useState<boolean>(false);
+  const [selectedChronicleEvent, setSelectedChronicleEvent] = useState<ChronicleEvent | null>(null);
+  const [relatedChronicleEvents, setRelatedChronicleEvents] = useState<ChronicleEvent[]>([]);
+  const [detailLoading, setDetailLoading] = useState<boolean>(false);
+
+  const fetchChronicle = useCallback(async () => {
+    setChronicleLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (chronicleSpecies !== 'all') params.append('species', chronicleSpecies);
+      if (chronicleCategory !== 'all') params.append('event_type', chronicleCategory);
+      if (chronicleClan !== 'all') params.append('clan_id', chronicleClan);
+      if (chronicleImportance > 1) params.append('min_importance', chronicleImportance.toString());
+      if (chronicleSearch.trim()) params.append('search', chronicleSearch.trim());
+      params.append('limit', '80');
+
+      const res = await fetch(`/api/simulation/chronicle?${params.toString()}`);
+      if (res.ok) {
+        const json: ChronicleTimelineResponse = await res.json();
+        setChronicleEvents(json.events || []);
+        setChronicleTotal(json.total || 0);
+      }
+    } catch (e) {
+      console.error('Falha ao carregar crônica histórica:', e);
+    } finally {
+      setChronicleLoading(false);
+    }
+  }, [chronicleSpecies, chronicleCategory, chronicleClan, chronicleImportance, chronicleSearch]);
+
+  useEffect(() => {
+    if (activeTab === 'chronicle') {
+      fetchChronicle();
+    }
+  }, [activeTab, fetchChronicle]);
+
+  const handleInspectChronicleEvent = async (event: ChronicleEvent) => {
+    setSelectedChronicleEvent(event);
+    setDetailLoading(true);
+    try {
+      const res = await fetch(`/api/simulation/chronicle/${event.id}`);
+      if (res.ok) {
+        const json: ChronicleEventDetailResponse = await res.json();
+        setRelatedChronicleEvents(json.related_events || []);
+      }
+    } catch (e) {
+      console.error('Falha ao carregar detalhes do evento:', e);
+    } finally {
+      setDetailLoading(false);
+    }
+  };
 
   // Gera curva SVG dos últimos 100 ticks
   const renderSparkline = () => {
@@ -122,6 +210,8 @@ export const MetricsPanel: React.FC<MetricsPanelProps> = ({
 
   const filteredOrganisms = organisms.filter((o) => {
     if (inhabitantFilter === 'all') return true;
+    if (inhabitantFilter === 'V') return o.sp === 'V';
+    if (inhabitantFilter === 'P') return o.sp !== 'V';
     return o.r === inhabitantFilter;
   });
 
@@ -186,6 +276,27 @@ export const MetricsPanel: React.FC<MetricsPanelProps> = ({
         </button>
 
         <button
+          onClick={() => setActiveTab('territories')}
+          style={{
+            flex: 1,
+            padding: '6px 3px',
+            fontSize: '10px',
+            fontWeight: 700,
+            borderRadius: '6px',
+            border: 'none',
+            background: activeTab === 'territories' ? 'rgba(16, 185, 129, 0.2)' : 'transparent',
+            color: activeTab === 'territories' ? '#34D399' : 'var(--color-text-muted)',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '3px',
+          }}
+        >
+          <Shield size={12} /> Zonas ({territories.length})
+        </button>
+
+        <button
           onClick={() => setActiveTab('clans')}
           style={{
             flex: 1,
@@ -204,6 +315,51 @@ export const MetricsPanel: React.FC<MetricsPanelProps> = ({
           }}
         >
           <Crown size={12} /> Clãs ({clans.length})
+        </button>
+
+        <button
+          onClick={() => {
+            setActiveTab('chronicle');
+            setSelectedChronicleEvent(null);
+          }}
+          style={{
+            flex: 1,
+            padding: '6px 3px',
+            fontSize: '10px',
+            fontWeight: 700,
+            borderRadius: '6px',
+            border: 'none',
+            background: activeTab === 'chronicle' ? 'rgba(234, 179, 8, 0.2)' : 'transparent',
+            color: activeTab === 'chronicle' ? '#FBBF24' : 'var(--color-text-muted)',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '3px',
+          }}
+        >
+          <BookOpen size={12} /> Crônica
+        </button>
+
+        <button
+          onClick={() => setActiveTab('evolution')}
+          style={{
+            flex: 1,
+            padding: '6px 3px',
+            fontSize: '10px',
+            fontWeight: 700,
+            borderRadius: '6px',
+            border: 'none',
+            background: activeTab === 'evolution' ? 'rgba(168, 85, 247, 0.2)' : 'transparent',
+            color: activeTab === 'evolution' ? '#C084FC' : 'var(--color-text-muted)',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '3px',
+          }}
+        >
+          <Dna size={12} /> Evolução
         </button>
 
         <button
@@ -276,6 +432,250 @@ export const MetricsPanel: React.FC<MetricsPanelProps> = ({
                 </div>
                 <div style={{ fontSize: '10px', color: 'var(--color-text-muted)' }}>
                   {metrics?.total_food_consumed ?? 0} consumidos
+                </div>
+              </div>
+            </div>
+
+            {/* 🌿 Ciclos Ambientais & Equilíbrio Ecológico */}
+            {currentSeason && currentEcology && (
+              <div
+                style={{
+                  background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.9) 0%, rgba(30, 41, 59, 0.8) 100%)',
+                  padding: '12px',
+                  borderRadius: '8px',
+                  border: `1px solid ${
+                    currentSeason.season === 'SPRING'
+                      ? 'rgba(16, 185, 129, 0.35)'
+                      : currentSeason.season === 'SUMMER'
+                      ? 'rgba(245, 158, 11, 0.35)'
+                      : currentSeason.season === 'AUTUMN'
+                      ? 'rgba(234, 88, 12, 0.35)'
+                      : 'rgba(56, 189, 248, 0.35)'
+                  }`,
+                  boxShadow: '0 4px 15px rgba(0,0,0,0.25)',
+                }}
+              >
+                {/* Header da Estação e Ano */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ fontSize: '15px' }}>{currentSeason.season_icon}</span>
+                    <span style={{ fontSize: '12px', fontWeight: 800, color: '#F8FAFC' }}>
+                      {currentSeason.season_name} · Ano {currentSeason.year}
+                    </span>
+                    <span
+                      style={{
+                        fontSize: '10px',
+                        padding: '1px 6px',
+                        borderRadius: '4px',
+                        background: 'rgba(255, 255, 255, 0.08)',
+                        fontFamily: 'JetBrains Mono, monospace',
+                        color: '#38BDF8',
+                      }}
+                    >
+                      {currentSeason.temperature.toFixed(1)}°C
+                    </span>
+                  </div>
+                  <div style={{ fontSize: '10px', color: '#94A3B8' }}>
+                    {Math.round(currentSeason.season_progress * 100)}% da estação
+                  </div>
+                </div>
+
+                {/* Barra de Progresso Sazonal */}
+                <div style={{ width: '100%', height: '4px', background: 'rgba(255, 255, 255, 0.08)', borderRadius: '2px', overflow: 'hidden', marginBottom: '10px' }}>
+                  <div
+                    style={{
+                      width: `${Math.round(currentSeason.season_progress * 100)}%`,
+                      height: '100%',
+                      background:
+                        currentSeason.season === 'SPRING'
+                          ? 'linear-gradient(90deg, #10B981, #34D399)'
+                          : currentSeason.season === 'SUMMER'
+                          ? 'linear-gradient(90deg, #F59E0B, #FBBF24)'
+                          : currentSeason.season === 'AUTUMN'
+                          ? 'linear-gradient(90deg, #EA580C, #FB923C)'
+                          : 'linear-gradient(90deg, #0284C7, #38BDF8)',
+                      transition: 'width 0.3s ease',
+                    }}
+                  />
+                </div>
+
+                {/* Modificadores Climáticos Sazonais */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px', marginBottom: '10px' }}>
+                  <div style={{ background: 'rgba(255, 255, 255, 0.03)', padding: '5px 6px', borderRadius: '5px', textAlign: 'center', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
+                    <div style={{ fontSize: '8px', color: '#94A3B8', textTransform: 'uppercase' }}>Regeneração</div>
+                    <div style={{ fontSize: '11px', fontWeight: 800, color: currentSeason.food_spawn_multiplier >= 1.0 ? '#34D399' : '#F87171', fontFamily: 'JetBrains Mono, monospace' }}>
+                      {currentSeason.food_spawn_multiplier.toFixed(2)}x
+                    </div>
+                  </div>
+                  <div style={{ background: 'rgba(255, 255, 255, 0.03)', padding: '5px 6px', borderRadius: '5px', textAlign: 'center', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
+                    <div style={{ fontSize: '8px', color: '#94A3B8', textTransform: 'uppercase' }}>Metabolismo</div>
+                    <div style={{ fontSize: '11px', fontWeight: 800, color: currentSeason.metabolic_cost_multiplier <= 1.0 ? '#34D399' : '#FBBF24', fontFamily: 'JetBrains Mono, monospace' }}>
+                      {currentSeason.metabolic_cost_multiplier.toFixed(2)}x
+                    </div>
+                  </div>
+                  <div style={{ background: 'rgba(255, 255, 255, 0.03)', padding: '5px 6px', borderRadius: '5px', textAlign: 'center', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
+                    <div style={{ fontSize: '8px', color: '#94A3B8', textTransform: 'uppercase' }}>Limiar Reprod.</div>
+                    <div style={{ fontSize: '11px', fontWeight: 800, color: currentSeason.reproduction_cost_multiplier <= 1.0 ? '#34D399' : '#F87171', fontFamily: 'JetBrains Mono, monospace' }}>
+                      {currentSeason.reproduction_cost_multiplier.toFixed(2)}x
+                    </div>
+                  </div>
+                </div>
+
+                {/* Balanço de Biomassa & Capacidade de Suporte */}
+                <div style={{ background: 'rgba(0, 0, 0, 0.25)', padding: '8px 10px', borderRadius: '6px', marginBottom: '8px', border: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '10px', marginBottom: '4px' }}>
+                    <span style={{ color: '#CBD5E1', fontWeight: 700 }}>Capacidade de Suporte</span>
+                    <span
+                      style={{
+                        fontSize: '9px',
+                        padding: '1px 5px',
+                        borderRadius: '3px',
+                        background: currentEcology.is_overpopulated ? 'rgba(239, 68, 68, 0.2)' : 'rgba(16, 185, 129, 0.2)',
+                        color: currentEcology.is_overpopulated ? '#EF4444' : '#10B981',
+                        fontWeight: 800,
+                      }}
+                    >
+                      {currentEcology.is_overpopulated ? '⚠️ SOBRECARGA' : 'EQUILIBRADA'} ({Math.round(currentEcology.carrying_capacity_ratio * 100)}%)
+                    </span>
+                  </div>
+                  <div style={{ width: '100%', height: '5px', background: 'rgba(255, 255, 255, 0.08)', borderRadius: '3px', overflow: 'hidden' }}>
+                    <div
+                      style={{
+                        width: `${Math.min(100, Math.round(currentEcology.carrying_capacity_ratio * 100))}%`,
+                        height: '100%',
+                        background: currentEcology.is_overpopulated ? '#EF4444' : '#10B981',
+                      }}
+                    />
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9px', color: '#94A3B8', marginTop: '4px' }}>
+                    <span>Pop: {metrics?.population ?? 0} hab.</span>
+                    <span>Biomassa Total: {currentEcology.total_biomass} kcal</span>
+                    <span>Capacidade: {currentEcology.carrying_capacity} hab.</span>
+                  </div>
+                </div>
+
+                {/* Fluxo de Biomassa: Consumo vs. Regeneração */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', marginBottom: '8px' }}>
+                  <div style={{ background: 'rgba(52, 211, 153, 0.08)', padding: '6px 8px', borderRadius: '6px', border: '1px solid rgba(52, 211, 153, 0.2)' }}>
+                    <div style={{ fontSize: '8px', color: '#6EE7B7', textTransform: 'uppercase' }}>Regeneração</div>
+                    <div style={{ fontSize: '12px', fontWeight: 800, color: '#34D399', fontFamily: 'JetBrains Mono, monospace' }}>
+                      +{currentEcology.regeneration_rate} <span style={{ fontSize: '8px' }}>kcal/t</span>
+                    </div>
+                  </div>
+                  <div style={{ background: 'rgba(239, 68, 68, 0.08)', padding: '6px 8px', borderRadius: '6px', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
+                    <div style={{ fontSize: '8px', color: '#FCA5A5', textTransform: 'uppercase' }}>Consumo</div>
+                    <div style={{ fontSize: '12px', fontWeight: 800, color: '#F87171', fontFamily: 'JetBrains Mono, monospace' }}>
+                      -{currentEcology.consumption_rate} <span style={{ fontSize: '8px' }}>kcal/t</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Balanço Demográfico Sazonal e Saldo Líquido */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '10px', paddingTop: '4px', borderTop: '1px solid rgba(255, 255, 255, 0.06)' }}>
+                  <span style={{ color: '#94A3B8' }}>
+                    Saldo Líquido:{' '}
+                    <strong style={{ color: currentEcology.biomass_balance >= 0 ? '#34D399' : '#F87171' }}>
+                      {currentEcology.biomass_balance > 0 ? '+' : ''}{currentEcology.biomass_balance} kcal/t
+                    </strong>
+                  </span>
+                  <span style={{ color: '#94A3B8' }}>
+                    Regiões Críticas:{' '}
+                    <strong style={{ color: currentEcology.critical_regions_count > 0 ? '#FBBF24' : '#34D399' }}>
+                      {currentEcology.critical_regions_count}
+                    </strong>
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* Coexistência Ecológica das Raças: Vrancos vs Predadores */}
+            <div
+              style={{
+                background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.85) 0%, rgba(30, 41, 59, 0.7) 100%)',
+                padding: '12px',
+                borderRadius: '8px',
+                border: '1px solid rgba(245, 158, 11, 0.3)',
+                boxShadow: '0 4px 15px rgba(0,0,0,0.2)',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <span style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', color: '#FDE047', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  ⚔️ Raças: Vrancos vs Predadores
+                </span>
+                <span style={{ fontSize: '9px', color: '#94A3B8' }}>
+                  Balanço Populacional
+                </span>
+              </div>
+
+              {/* Barra comparativa de população */}
+              {(() => {
+                const vrancosCount = metrics?.vrancos_count ?? organisms.filter((o) => o.sp === 'V').length;
+                const predatorsCount = metrics?.predators_count ?? organisms.filter((o) => o.sp !== 'V').length;
+                const totalRaces = Math.max(1, vrancosCount + predatorsCount);
+                const vrancosPct = Math.round((vrancosCount / totalRaces) * 100);
+                const predatorsPct = 100 - vrancosPct;
+
+                return (
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', fontWeight: 700, marginBottom: '4px' }}>
+                      <span style={{ color: '#F59E0B' }}>⚡ Vrancos: {vrancosCount} ({vrancosPct}%)</span>
+                      <span style={{ color: '#10B981' }}>🐺 Predadores: {predatorsCount} ({predatorsPct}%)</span>
+                    </div>
+                    <div style={{ width: '100%', height: '6px', background: 'rgba(255,255,255,0.08)', borderRadius: '3px', overflow: 'hidden', display: 'flex' }}>
+                      <div style={{ width: `${vrancosPct}%`, background: 'linear-gradient(90deg, #F59E0B, #FBBF24)', transition: 'width 0.3s ease' }} />
+                      <div style={{ width: `${predatorsPct}%`, background: 'linear-gradient(90deg, #34D399, #10B981)', transition: 'width 0.3s ease' }} />
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Indicadores Ecológicos de Confronto e Defesa */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px', marginTop: '10px' }}>
+                <div style={{ background: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.2)', padding: '6px', borderRadius: '6px', textAlign: 'center' }}>
+                  <div style={{ fontSize: '8px', color: '#FCD34D', textTransform: 'uppercase' }}>Grupo Médio</div>
+                  <div style={{ fontSize: '13px', fontWeight: 800, color: '#FDE047', fontFamily: 'JetBrains Mono, monospace' }}>
+                    {(metrics?.vranco_avg_group_size ?? 1.0).toFixed(1)}
+                  </div>
+                  <div style={{ fontSize: '7px', color: '#94A3B8' }}>Vrancos/Bando</div>
+                </div>
+
+                <div style={{ background: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.2)', padding: '6px', borderRadius: '6px', textAlign: 'center' }}>
+                  <div style={{ fontSize: '8px', color: '#FCD34D', textTransform: 'uppercase' }}>🛡️ Mobbing</div>
+                  <div style={{ fontSize: '13px', fontWeight: 800, color: '#FBBF24', fontFamily: 'JetBrains Mono, monospace' }}>
+                    {metrics?.collective_defenses_count ?? 0}
+                  </div>
+                  <div style={{ fontSize: '7px', color: '#94A3B8' }}>Defesas Coletivas</div>
+                </div>
+
+                <div style={{ background: 'rgba(56, 189, 248, 0.08)', border: '1px solid rgba(56, 189, 248, 0.2)', padding: '6px', borderRadius: '6px', textAlign: 'center' }}>
+                  <div style={{ fontSize: '8px', color: '#7DD3FC', textTransform: 'uppercase' }}>Periferia</div>
+                  <div style={{ fontSize: '13px', fontWeight: 800, color: '#38BDF8', fontFamily: 'JetBrains Mono, monospace' }}>
+                    {(metrics?.vrancos_periphery_pct ?? 0).toFixed(0)}%
+                  </div>
+                  <div style={{ fontSize: '7px', color: '#94A3B8' }}>Vrancos nas Bordas</div>
+                </div>
+              </div>
+
+              {/* Estatísticas de Caça e Predação */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '6px', marginTop: '6px' }}>
+                <div style={{ background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.2)', padding: '6px 8px', borderRadius: '6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <div style={{ fontSize: '8px', color: '#FCA5A5' }}>Predação (Kills)</div>
+                    <div style={{ fontSize: '12px', fontWeight: 800, color: '#EF4444', fontFamily: 'JetBrains Mono, monospace' }}>
+                      {metrics?.predation_kills ?? 0} <span style={{ fontSize: '8px', color: '#94A3B8' }}>({((metrics?.hunting_success_rate ?? 0) * 100).toFixed(0)}%)</span>
+                    </div>
+                  </div>
+                  <span style={{ fontSize: '14px' }}>🐺</span>
+                </div>
+
+                <div style={{ background: 'rgba(16, 185, 129, 0.08)', border: '1px solid rgba(16, 185, 129, 0.2)', padding: '6px 8px', borderRadius: '6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <div style={{ fontSize: '8px', color: '#6EE7B7' }}>Fugas & Vitórias</div>
+                    <div style={{ fontSize: '12px', fontWeight: 800, color: '#34D399', fontFamily: 'JetBrains Mono, monospace' }}>
+                      {metrics?.flee_count ?? 0} <span style={{ fontSize: '8px', color: '#FDE047' }}>(⚡{metrics?.predators_defeated ?? 0})</span>
+                    </div>
+                  </div>
+                  <span style={{ fontSize: '14px' }}>💨</span>
                 </div>
               </div>
             </div>
@@ -542,6 +942,189 @@ export const MetricsPanel: React.FC<MetricsPanelProps> = ({
           </>
         )}
 
+        {/* ABA DE TERRITÓRIOS E DISPUTA POR RECURSOS */}
+        {activeTab === 'territories' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', color: '#94A3B8' }}>
+                Regiões & Qualidade Territorial ({territories.length})
+              </span>
+              <span style={{ fontSize: '10px', color: '#34D399', fontWeight: 600 }}>
+                {territories.filter((t) => t.status === 'SETTLED').length} Ocupadas &bull; {territories.filter((t) => t.status === 'CONTESTED').length} Disputadas
+              </span>
+            </div>
+
+            {/* Painel de Indicadores Macroeconômicos / Ecológicos */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px' }}>
+              <div style={{ background: 'rgba(15, 23, 42, 0.7)', padding: '8px 6px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.06)', textAlign: 'center' }}>
+                <div style={{ fontSize: '9px', color: '#94A3B8' }}>Assentadas</div>
+                <div style={{ fontSize: '15px', fontWeight: 800, color: '#34D399', marginTop: '2px' }}>
+                  {territories.filter((t) => t.status === 'SETTLED').length}
+                </div>
+              </div>
+              <div style={{ background: 'rgba(15, 23, 42, 0.7)', padding: '8px 6px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.06)', textAlign: 'center' }}>
+                <div style={{ fontSize: '9px', color: '#94A3B8' }}>Disputadas</div>
+                <div style={{ fontSize: '15px', fontWeight: 800, color: '#F87171', marginTop: '2px' }}>
+                  {territories.filter((t) => t.status === 'CONTESTED').length}
+                </div>
+              </div>
+              <div style={{ background: 'rgba(15, 23, 42, 0.7)', padding: '8px 6px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.06)', textAlign: 'center' }}>
+                <div style={{ fontSize: '9px', color: '#94A3B8' }}>Degradadas</div>
+                <div style={{ fontSize: '15px', fontWeight: 800, color: '#F59E0B', marginTop: '2px' }}>
+                  {territories.filter((t) => t.status === 'DEGRADED').length}
+                </div>
+              </div>
+              <div style={{ background: 'rgba(15, 23, 42, 0.7)', padding: '8px 6px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.06)', textAlign: 'center' }}>
+                <div style={{ fontSize: '9px', color: '#94A3B8' }}>Qualidade</div>
+                <div style={{ fontSize: '15px', fontWeight: 800, color: '#38BDF8', marginTop: '2px' }}>
+                  {territories.length > 0 ? (territories.reduce((acc, t) => acc + t.quality_score, 0) / territories.length).toFixed(0) : 0}%
+                </div>
+              </div>
+            </div>
+
+            {/* Lista Detalhada das 8 Zonas */}
+            {territories.map((zone) => {
+              const getStatusBadge = (st: string) => {
+                switch (st) {
+                  case 'SETTLED':
+                    return { label: 'Assentada', color: '#34D399', bg: 'rgba(52, 211, 153, 0.15)', border: 'rgba(52, 211, 153, 0.4)' };
+                  case 'CONTESTED':
+                    return { label: 'Em Disputa', color: '#F87171', bg: 'rgba(239, 68, 68, 0.15)', border: 'rgba(239, 68, 68, 0.5)' };
+                  case 'DEGRADED':
+                    return { label: 'Degradada', color: '#94A3B8', bg: 'rgba(148, 163, 184, 0.15)', border: 'rgba(148, 163, 184, 0.4)' };
+                  case 'ABANDONED':
+                    return { label: 'Pousio / Repouso', color: '#F59E0B', bg: 'rgba(245, 158, 11, 0.15)', border: 'rgba(245, 158, 11, 0.4)' };
+                  case 'UNCLAIMED':
+                  default:
+                    return { label: 'Livre', color: '#38BDF8', bg: 'rgba(56, 189, 248, 0.15)', border: 'rgba(56, 189, 248, 0.3)' };
+                }
+              };
+
+              const badge = getStatusBadge(zone.status);
+              const qualityColor = zone.quality_score >= 60 ? '#34D399' : zone.quality_score >= 35 ? '#FBBF24' : '#F87171';
+
+              return (
+                <div
+                  key={zone.id}
+                  style={{
+                    background: 'rgba(15, 23, 42, 0.75)',
+                    border: `1px solid ${zone.status === 'CONTESTED' ? 'rgba(239, 68, 68, 0.5)' : 'rgba(255, 255, 255, 0.08)'}`,
+                    borderRadius: '10px',
+                    padding: '12px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '10px',
+                  }}
+                >
+                  {/* Cabeçalho da Zona */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ fontSize: '13px', fontWeight: 800, color: '#F8FAFC' }}>
+                          {zone.is_peripheral ? '🛡️' : '🌴'} {zone.name}
+                        </span>
+                        <span style={{ fontSize: '9px', color: 'var(--color-text-muted)' }}>
+                          #{zone.id}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '10px', color: 'var(--color-text-muted)', marginTop: '2px' }}>
+                        {zone.is_peripheral ? 'Região Periférica / Santuário' : 'Oásis Central de Recursos'} &bull; Centro ({zone.x.toFixed(0)}, {zone.y.toFixed(0)})
+                      </div>
+                    </div>
+
+                    <span
+                      style={{
+                        fontSize: '9px',
+                        padding: '3px 8px',
+                        borderRadius: '12px',
+                        fontWeight: 700,
+                        color: badge.color,
+                        background: badge.bg,
+                        border: `1px solid ${badge.border}`,
+                      }}
+                    >
+                      {badge.label}
+                    </span>
+                  </div>
+
+                  {/* Barra de Qualidade Territorial */}
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', marginBottom: '3px' }}>
+                      <span style={{ color: '#94A3B8', fontWeight: 600 }}>Índice de Qualidade Ambiental</span>
+                      <span style={{ fontWeight: 800, color: qualityColor, fontFamily: 'JetBrains Mono, monospace' }}>
+                        {zone.quality_score.toFixed(1)} / 100
+                      </span>
+                    </div>
+                    <div style={{ width: '100%', height: '5px', background: 'rgba(255, 255, 255, 0.06)', borderRadius: '3px', overflow: 'hidden' }}>
+                      <div style={{ width: `${Math.min(100, zone.quality_score)}%`, height: '100%', background: qualityColor }} />
+                    </div>
+                  </div>
+
+                  {/* Grid de 6 Indicadores Regionais */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px' }}>
+                    <div style={{ background: 'rgba(255, 255, 255, 0.02)', padding: '6px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.04)' }}>
+                      <div style={{ fontSize: '9px', color: 'var(--color-text-muted)' }}>Alimento / Biomassa</div>
+                      <div style={{ fontSize: '11px', fontWeight: 700, color: '#34D399', marginTop: '1px' }}>
+                        🥩 {zone.food_count} ({zone.biomass.toFixed(0)} kcal)
+                      </div>
+                    </div>
+
+                    <div style={{ background: 'rgba(255, 255, 255, 0.02)', padding: '6px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.04)' }}>
+                      <div style={{ fontSize: '9px', color: 'var(--color-text-muted)' }}>Fertilidade do Solo</div>
+                      <div style={{ fontSize: '11px', fontWeight: 700, color: '#FBBF24', marginTop: '1px' }}>
+                        🌱 {zone.current_fertility.toFixed(2)}x
+                      </div>
+                    </div>
+
+                    <div style={{ background: 'rgba(255, 255, 255, 0.02)', padding: '6px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.04)' }}>
+                      <div style={{ fontSize: '9px', color: 'var(--color-text-muted)' }}>Lotação / Suporte</div>
+                      <div style={{ fontSize: '11px', fontWeight: 700, color: '#38BDF8', marginTop: '1px' }}>
+                        👥 {zone.occupants_count} / {zone.carrying_capacity}
+                      </div>
+                    </div>
+
+                    <div style={{ background: 'rgba(255, 255, 255, 0.02)', padding: '6px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.04)' }}>
+                      <div style={{ fontSize: '9px', color: 'var(--color-text-muted)' }}>Fauna Residente</div>
+                      <div style={{ fontSize: '11px', fontWeight: 700, color: '#E2E8F0', marginTop: '1px' }}>
+                        🐇 {zone.vranco_count} &bull; 🐺 {zone.predator_count}
+                      </div>
+                    </div>
+
+                    <div style={{ background: 'rgba(255, 255, 255, 0.02)', padding: '6px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.04)' }}>
+                      <div style={{ fontSize: '9px', color: 'var(--color-text-muted)' }}>Segurança Local</div>
+                      <div style={{ fontSize: '11px', fontWeight: 700, color: zone.safety_score >= 0.7 ? '#34D399' : '#F87171', marginTop: '1px' }}>
+                        🛡️ {(zone.safety_score * 100).toFixed(0)}%
+                      </div>
+                    </div>
+
+                    <div style={{ background: 'rgba(255, 255, 255, 0.02)', padding: '6px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.04)' }}>
+                      <div style={{ fontSize: '9px', color: 'var(--color-text-muted)' }}>Competição</div>
+                      <div style={{ fontSize: '11px', fontWeight: 700, color: zone.competition_pressure > 0.5 ? '#F87171' : '#CBD5E1', marginTop: '1px' }}>
+                        ⚡ {(zone.competition_pressure * 100).toFixed(0)}%
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Histórico Recente de Ocorrências na Zona */}
+                  {zone.history_log && zone.history_log.length > 0 && (
+                    <div style={{ background: 'rgba(0, 0, 0, 0.25)', padding: '6px 8px', borderRadius: '6px', fontSize: '9px', color: '#94A3B8' }}>
+                      <div style={{ fontWeight: 700, color: '#E2E8F0', marginBottom: '2px' }}>
+                        Histórico Recente de Ocupação:
+                      </div>
+                      {zone.history_log.slice(-2).map((h, i) => (
+                        <div key={i} style={{ display: 'flex', gap: '4px', marginTop: '2px' }}>
+                          <span style={{ color: '#FBBF24', fontFamily: 'JetBrains Mono, monospace' }}>#{h.tick}</span>
+                          <span>{h.description}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
         {/* ABA DE CLÃS E ESTRATÉGIA COLETIVA */}
         {activeTab === 'clans' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -799,7 +1382,7 @@ export const MetricsPanel: React.FC<MetricsPanelProps> = ({
                                   fontWeight: 600,
                                 }}
                               >
-                                {relIcon} Clã #{targetClanId}: {rel}
+                                {relIcon} Clã #{targetClanId}: {String(rel)}
                               </span>
                             );
                           })}
@@ -825,10 +1408,782 @@ export const MetricsPanel: React.FC<MetricsPanelProps> = ({
                         </div>
                       </div>
                     )}
+
+                    {/* Botão de Atalho para a Crônica Histórica deste Clã */}
+                    <div style={{ borderTop: '1px solid rgba(255, 255, 255, 0.06)', paddingTop: '6px', display: 'flex', justifyContent: 'flex-end' }}>
+                      <button
+                        onClick={() => {
+                          setChronicleClan(String(clan.id));
+                          setActiveTab('chronicle');
+                          setSelectedChronicleEvent(null);
+                        }}
+                        style={{
+                          background: 'rgba(245, 158, 11, 0.12)',
+                          border: '1px solid rgba(245, 158, 11, 0.3)',
+                          borderRadius: '5px',
+                          color: '#FBBF24',
+                          fontSize: '10px',
+                          fontWeight: 600,
+                          padding: '4px 8px',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                        }}
+                      >
+                        <BookOpen size={11} /> Consultar Anais na Crônica &rarr;
+                      </button>
+                    </div>
                   </div>
                 );
               })
             )}
+          </div>
+        )}
+
+        {/* ABA DA CRÔNICA HISTÓRICA DO ECOSSISTEMA */}
+        {activeTab === 'chronicle' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {/* Header da Crônica */}
+            <div
+              style={{
+                background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.8) 0%, rgba(15, 23, 42, 0.95) 100%)',
+                border: '1px solid rgba(234, 179, 8, 0.3)',
+                borderRadius: '10px',
+                padding: '12px 14px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '8px',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <BookOpen size={16} color="#FBBF24" />
+                  <strong style={{ fontSize: '13px', color: '#F8FAFC' }}>Crônica Histórica do Ecossistema</strong>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ fontSize: '10px', color: '#94A3B8', background: 'rgba(255, 255, 255, 0.05)', padding: '2px 6px', borderRadius: '4px' }}>
+                    {chronicleTotal} registros
+                  </span>
+                  <button
+                    onClick={fetchChronicle}
+                    disabled={chronicleLoading}
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      color: '#FBBF24',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      padding: '2px',
+                    }}
+                    title="Atualizar Crônica"
+                  >
+                    <RefreshCw size={13} className={chronicleLoading ? 'spin' : ''} />
+                  </button>
+                </div>
+              </div>
+              <div style={{ fontSize: '11px', color: '#94A3B8', lineHeight: '1.4' }}>
+                Registro contínuo e factual de todos os nascimentos, lideranças, conflitos de clãs, migrações territoriais e transições climáticas.
+              </div>
+            </div>
+
+            {/* Painel de Filtros e Busca */}
+            <div
+              style={{
+                background: 'rgba(15, 23, 42, 0.6)',
+                border: '1px solid rgba(255, 255, 255, 0.08)',
+                borderRadius: '8px',
+                padding: '10px 12px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '8px',
+              }}
+            >
+              {/* Barra de Pesquisa */}
+              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                <Search size={13} color="#94A3B8" style={{ position: 'absolute', left: '8px' }} />
+                <input
+                  type="text"
+                  placeholder="Pesquisar indivíduo, clã, motivo ou causa..."
+                  value={chronicleSearch}
+                  onChange={(e) => setChronicleSearch(e.target.value)}
+                  style={{
+                    width: '100%',
+                    background: 'rgba(0, 0, 0, 0.3)',
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                    borderRadius: '6px',
+                    padding: '6px 26px 6px 28px',
+                    color: '#F8FAFC',
+                    fontSize: '11px',
+                    outline: 'none',
+                  }}
+                />
+                {chronicleSearch && (
+                  <button
+                    onClick={() => setChronicleSearch('')}
+                    style={{
+                      position: 'absolute',
+                      right: '6px',
+                      background: 'transparent',
+                      border: 'none',
+                      color: '#94A3B8',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <X size={12} />
+                  </button>
+                )}
+              </div>
+
+              {/* Filtros em Linha: Espécie, Categoria, Clã */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+                {/* Filtro de Espécie */}
+                <select
+                  value={chronicleSpecies}
+                  onChange={(e) => setChronicleSpecies(e.target.value)}
+                  style={{
+                    background: 'rgba(0, 0, 0, 0.3)',
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                    borderRadius: '6px',
+                    color: '#F8FAFC',
+                    fontSize: '10px',
+                    padding: '5px 6px',
+                    outline: 'none',
+                  }}
+                >
+                  <option value="all">Todas as Espécies</option>
+                  <option value="PREDATOR">Predadores</option>
+                  <option value="VRANCO">Vrancos</option>
+                </select>
+
+                {/* Filtro de Categoria de Evento */}
+                <select
+                  value={chronicleCategory}
+                  onChange={(e) => setChronicleCategory(e.target.value)}
+                  style={{
+                    background: 'rgba(0, 0, 0, 0.3)',
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                    borderRadius: '6px',
+                    color: '#F8FAFC',
+                    fontSize: '10px',
+                    padding: '5px 6px',
+                    outline: 'none',
+                  }}
+                >
+                  <option value="all">Todas as Categorias</option>
+                  <option value="BIRTH">🐣 Nascimentos & Gênese</option>
+                  <option value="DEATH">💀 Mortes & Falecimentos</option>
+                  <option value="LEADERSHIP_ELECTED">👑 Eleições de Líder Alpha/Beta</option>
+                  <option value="LEADERSHIP_DEPOSED">🚪 Deserções & Queda de Líder</option>
+                  <option value="CLAN_FOUNDED">🏰 Fundação de Clãs</option>
+                  <option value="CLAN_STAGE_CHANGE">📈 Evolução Social de Clã</option>
+                  <option value="WAR_DECLARED">⚔️ Declarações de Guerra</option>
+                  <option value="TRUCE_SIGNED">🕊️ Tréguas & Armistícios</option>
+                  <option value="TERRITORY_CONTESTED">🗺️ Disputas Territoriais</option>
+                  <option value="TERRITORY_LOST">🛡️ Recuos Pacíficos</option>
+                  <option value="MIGRATION">🧭 Migrações por Escassez</option>
+                  <option value="MOBBING_DEFENSE">🦅 Defesas Coletivas dos Vrancos</option>
+                  <option value="ENVIRONMENTAL_SEASON">❄️ Transições Climáticas</option>
+                  <option value="SPECIES_EXTINCTION">⚠️ Extinções</option>
+                  <option value="CULTURAL_LOSS">🧠 Perdas Culturais</option>
+                </select>
+              </div>
+
+              {/* Filtro de Clã e Importância */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '6px', alignItems: 'center' }}>
+                <select
+                  value={chronicleClan}
+                  onChange={(e) => setChronicleClan(e.target.value)}
+                  style={{
+                    background: 'rgba(0, 0, 0, 0.3)',
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                    borderRadius: '6px',
+                    color: '#F8FAFC',
+                    fontSize: '10px',
+                    padding: '5px 6px',
+                    outline: 'none',
+                  }}
+                >
+                  <option value="all">Todos os Clãs</option>
+                  {clans.map((c) => (
+                    <option key={c.id} value={String(c.id)}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+
+                {/* Seletor de Importância Mínima */}
+                <div style={{ display: 'flex', gap: '3px' }}>
+                  {[1, 3, 4, 5].map((imp) => (
+                    <button
+                      key={imp}
+                      onClick={() => setChronicleImportance(imp)}
+                      style={{
+                        flex: 1,
+                        padding: '4px 0',
+                        fontSize: '9px',
+                        fontWeight: 700,
+                        borderRadius: '4px',
+                        border: 'none',
+                        background: chronicleImportance === imp ? 'rgba(245, 158, 11, 0.25)' : 'rgba(255, 255, 255, 0.05)',
+                        color: chronicleImportance === imp ? '#FBBF24' : '#94A3B8',
+                        cursor: 'pointer',
+                      }}
+                      title={`Importância mínima ${imp}`}
+                    >
+                      ★{imp}+
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Visualizador de Detalhes do Evento Selecionado (Inspeção Profunda) */}
+            {selectedChronicleEvent && (
+              <div
+                style={{
+                  background: 'rgba(15, 23, 42, 0.95)',
+                  border: '1px solid rgba(245, 158, 11, 0.4)',
+                  borderRadius: '10px',
+                  padding: '12px 14px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px',
+                  boxShadow: '0 8px 24px rgba(0, 0, 0, 0.5)',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span
+                        style={{
+                          fontSize: '9px',
+                          fontWeight: 700,
+                          padding: '2px 6px',
+                          borderRadius: '4px',
+                          background: 'rgba(245, 158, 11, 0.15)',
+                          color: '#FBBF24',
+                        }}
+                      >
+                        {selectedChronicleEvent.event_type}
+                      </span>
+                      <span style={{ fontSize: '10px', color: '#94A3B8' }}>
+                        Ano {selectedChronicleEvent.year} • Ciclo {selectedChronicleEvent.tick}
+                      </span>
+                      <span style={{ fontSize: '10px', color: '#FBBF24' }}>
+                        {'★'.repeat(selectedChronicleEvent.importance)}
+                      </span>
+                    </div>
+                    <strong style={{ fontSize: '13px', color: '#F8FAFC', marginTop: '2px' }}>
+                      {selectedChronicleEvent.title}
+                    </strong>
+                  </div>
+                  <button
+                    onClick={() => setSelectedChronicleEvent(null)}
+                    style={{
+                      background: 'rgba(255, 255, 255, 0.05)',
+                      border: 'none',
+                      borderRadius: '4px',
+                      color: '#94A3B8',
+                      cursor: 'pointer',
+                      padding: '4px',
+                    }}
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+
+                <div style={{ fontSize: '11px', color: '#CBD5E1', lineHeight: '1.4' }}>
+                  {selectedChronicleEvent.description}
+                </div>
+
+                {/* Caixa de Causa e Efeito Factual */}
+                <div
+                  style={{
+                    background: 'rgba(0, 0, 0, 0.35)',
+                    border: '1px solid rgba(255, 255, 255, 0.06)',
+                    borderRadius: '6px',
+                    padding: '8px 10px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '6px',
+                    fontSize: '11px',
+                  }}
+                >
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    <span style={{ color: '#F59E0B', fontWeight: 700 }}>🔍 Causa Registrada:</span>
+                    <span style={{ color: '#E2E8F0' }}>{selectedChronicleEvent.cause}</span>
+                  </div>
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    <span style={{ color: '#38BDF8', fontWeight: 700 }}>⚖️ Resultado Concreto:</span>
+                    <span style={{ color: '#E2E8F0' }}>{selectedChronicleEvent.result}</span>
+                  </div>
+                </div>
+
+                {/* Participantes Envolvidos */}
+                {(selectedChronicleEvent.primary_organism_id || selectedChronicleEvent.clan_name) && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}>
+                    <span style={{ fontSize: '10px', color: '#94A3B8' }}>Envolvidos:</span>
+                    {selectedChronicleEvent.primary_organism_id && (
+                      <button
+                        onClick={() => onSelectOrganism(selectedChronicleEvent.primary_organism_id!)}
+                        style={{
+                          background: 'rgba(56, 189, 248, 0.15)',
+                          border: '1px solid rgba(56, 189, 248, 0.3)',
+                          borderRadius: '4px',
+                          color: '#38BDF8',
+                          fontSize: '10px',
+                          fontWeight: 600,
+                          padding: '2px 6px',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {selectedChronicleEvent.primary_organism_name || `Animal #${selectedChronicleEvent.primary_organism_id}`} &rarr;
+                      </button>
+                    )}
+                    {selectedChronicleEvent.clan_name && (
+                      <span
+                        style={{
+                          background: 'rgba(245, 158, 11, 0.15)',
+                          border: '1px solid rgba(245, 158, 11, 0.3)',
+                          borderRadius: '4px',
+                          color: '#FBBF24',
+                          fontSize: '10px',
+                          fontWeight: 600,
+                          padding: '2px 6px',
+                        }}
+                      >
+                        🏰 {selectedChronicleEvent.clan_name}
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                {/* Eventos Correlatos / Encadeamento Causal */}
+                {selectedChronicleEvent.related_event_ids && selectedChronicleEvent.related_event_ids.length > 0 && (
+                  <div style={{ borderTop: '1px solid rgba(255, 255, 255, 0.08)', paddingTop: '8px', marginTop: '2px' }}>
+                    <div style={{ fontSize: '10px', fontWeight: 700, color: '#C084FC', display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '6px' }}>
+                      <CornerDownRight size={11} /> Acontecimentos Correlatos / Nexo Causal ({selectedChronicleEvent.related_event_ids.length})
+                    </div>
+                    {detailLoading ? (
+                      <div style={{ fontSize: '10px', color: '#94A3B8' }}>Carregando conexões...</div>
+                    ) : relatedChronicleEvents.length > 0 ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        {relatedChronicleEvents.map((rel) => (
+                          <div
+                            key={rel.id}
+                            onClick={() => handleInspectChronicleEvent(rel)}
+                            style={{
+                              background: 'rgba(168, 85, 247, 0.08)',
+                              border: '1px solid rgba(168, 85, 247, 0.25)',
+                              borderRadius: '6px',
+                              padding: '6px 8px',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                            }}
+                          >
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
+                              <span style={{ fontSize: '10px', fontWeight: 600, color: '#F8FAFC' }}>
+                                {rel.title}
+                              </span>
+                              <span style={{ fontSize: '9px', color: '#94A3B8' }}>
+                                T#{rel.tick} • {rel.cause}
+                              </span>
+                            </div>
+                            <ArrowRight size={12} color="#C084FC" />
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: '10px', color: '#64748B' }}>Eventos arquivados ou prévios.</div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Feed da Linha do Tempo */}
+            {chronicleLoading ? (
+              <div style={{ padding: '30px', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '12px' }}>
+                Consultando anais da Crônica Histórica...
+              </div>
+            ) : chronicleEvents.length === 0 ? (
+              <div
+                style={{
+                  background: 'rgba(255, 255, 255, 0.02)',
+                  border: '1px dashed rgba(255, 255, 255, 0.1)',
+                  borderRadius: '10px',
+                  padding: '24px 16px',
+                  textAlign: 'center',
+                  color: 'var(--color-text-muted)',
+                  fontSize: '11px',
+                }}
+              >
+                Nenhum acontecimento registrado para os filtros selecionados.
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {chronicleEvents.map((event) => {
+                  const getCategoryColor = (type: string) => {
+                    switch (type) {
+                      case 'BIRTH':
+                        return { color: '#34D399', bg: 'rgba(52, 211, 153, 0.12)' };
+                      case 'DEATH':
+                        return { color: '#F87171', bg: 'rgba(248, 113, 113, 0.12)' };
+                      case 'CLAN_FOUNDED':
+                      case 'CLAN_STAGE_CHANGE':
+                      case 'LEADERSHIP_ELECTED':
+                        return { color: '#FBBF24', bg: 'rgba(245, 158, 11, 0.12)' };
+                      case 'WAR_DECLARED':
+                      case 'COMBAT_ENGAGEMENT':
+                        return { color: '#FB7185', bg: 'rgba(251, 113, 133, 0.12)' };
+                      case 'TRUCE_SIGNED':
+                      case 'MOBBING_DEFENSE':
+                        return { color: '#38BDF8', bg: 'rgba(56, 189, 248, 0.12)' };
+                      case 'MIGRATION':
+                      case 'TERRITORY_LOST':
+                        return { color: '#10B981', bg: 'rgba(16, 185, 129, 0.12)' };
+                      case 'ENVIRONMENTAL_SEASON':
+                      case 'SPECIES_EXTINCTION':
+                        return { color: '#A855F7', bg: 'rgba(168, 85, 247, 0.12)' };
+                      default:
+                        return { color: '#94A3B8', bg: 'rgba(148, 163, 184, 0.12)' };
+                    }
+                  };
+
+                  const catStyle = getCategoryColor(event.event_type);
+                  const isSelected = selectedChronicleEvent?.id === event.id;
+
+                  return (
+                    <div
+                      key={event.id}
+                      onClick={() => handleInspectChronicleEvent(event)}
+                      style={{
+                        background: isSelected ? 'rgba(30, 41, 59, 0.9)' : 'rgba(15, 23, 42, 0.75)',
+                        border: isSelected
+                          ? '1px solid #FBBF24'
+                          : event.importance >= 4
+                          ? '1px solid rgba(245, 158, 11, 0.35)'
+                          : '1px solid rgba(255, 255, 255, 0.06)',
+                        borderRadius: '8px',
+                        padding: '10px 12px',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '6px',
+                        transition: 'all 0.15s ease',
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!isSelected) e.currentTarget.style.borderColor = 'rgba(245, 158, 11, 0.4)';
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!isSelected) {
+                          e.currentTarget.style.borderColor = event.importance >= 4
+                            ? 'rgba(245, 158, 11, 0.35)'
+                            : 'rgba(255, 255, 255, 0.06)';
+                        }
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                          <span
+                            style={{
+                              fontSize: '9px',
+                              fontWeight: 700,
+                              padding: '2px 5px',
+                              borderRadius: '4px',
+                              background: catStyle.bg,
+                              color: catStyle.color,
+                            }}
+                          >
+                            {event.event_type}
+                          </span>
+                          <span style={{ fontSize: '9px', color: '#FBBF24' }}>
+                            {'★'.repeat(event.importance)}
+                          </span>
+                        </div>
+                        <span style={{ fontSize: '10px', color: '#94A3B8', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                          <Clock size={10} /> Ano {event.year} • T#{event.tick}
+                        </span>
+                      </div>
+
+                      <div style={{ fontSize: '11px', fontWeight: 600, color: '#F8FAFC' }}>
+                        {event.title}
+                      </div>
+
+                      <div style={{ fontSize: '10px', color: '#94A3B8', lineHeight: '1.3' }}>
+                        {event.description}
+                      </div>
+
+                      {/* Callout de Causa e Efeito */}
+                      <div
+                        style={{
+                          background: 'rgba(0, 0, 0, 0.25)',
+                          borderRadius: '4px',
+                          padding: '5px 8px',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '3px',
+                          fontSize: '10px',
+                        }}
+                      >
+                        <div style={{ display: 'flex', gap: '4px' }}>
+                          <span style={{ color: '#F59E0B', fontWeight: 600 }}>Causa:</span>
+                          <span style={{ color: '#E2E8F0' }}>{event.cause}</span>
+                        </div>
+                        <div style={{ display: 'flex', gap: '4px' }}>
+                          <span style={{ color: '#38BDF8', fontWeight: 600 }}>Resultado:</span>
+                          <span style={{ color: '#E2E8F0' }}>{event.result}</span>
+                        </div>
+                      </div>
+
+                      {/* Rodapé do Card */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '2px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '9px', color: '#64748B' }}>
+                          {event.clan_name && <span>🏰 {event.clan_name}</span>}
+                          {event.species && <span>• {event.species}</span>}
+                        </div>
+                        {event.related_event_ids && event.related_event_ids.length > 0 && (
+                          <span style={{ fontSize: '9px', color: '#C084FC', display: 'flex', alignItems: 'center', gap: '2px' }}>
+                            <CornerDownRight size={10} /> {event.related_event_ids.length} conexões
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'evolution' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {/* Header / Visão da Dinâmica Evolutiva */}
+            <div
+              style={{
+                background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.7) 0%, rgba(15, 23, 42, 0.9) 100%)',
+                border: '1px solid rgba(168, 85, 247, 0.25)',
+                borderRadius: '8px',
+                padding: '12px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '8px',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Dna size={16} color="#C084FC" />
+                  <span style={{ fontSize: '12px', fontWeight: 700, color: '#F8FAFC' }}>
+                    Painel de Evolução & Genética Populacional
+                  </span>
+                </div>
+                <span style={{ fontSize: '10px', color: '#94A3B8' }}>
+                  Pop: {metrics?.population ?? 0} • Gen Máx: {metrics?.max_generation ?? 0}
+                </span>
+              </div>
+
+              {/* Indicadores de Diversidade e Endogamia */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '6px' }}>
+                <div style={{ background: 'rgba(255, 255, 255, 0.03)', padding: '6px 8px', borderRadius: '6px' }}>
+                  <span style={{ fontSize: '9px', color: '#94A3B8' }}>Heterozigosidade Média</span>
+                  <div style={{ fontSize: '13px', fontWeight: 700, color: '#38BDF8' }}>
+                    {((metrics?.evolution?.genetic_diversity?.average_heterozygosity ?? 0.5) * 100).toFixed(1)}%
+                  </div>
+                </div>
+                <div style={{ background: 'rgba(255, 255, 255, 0.03)', padding: '6px 8px', borderRadius: '6px' }}>
+                  <span style={{ fontSize: '9px', color: '#94A3B8' }}>Consanguinidade Média (F)</span>
+                  <div
+                    style={{
+                      fontSize: '13px',
+                      fontWeight: 700,
+                      color: (metrics?.evolution?.genetic_diversity?.average_inbreeding_coefficient ?? 0) > 0.05 ? '#F87171' : '#34D399',
+                    }}
+                  >
+                    F = {(metrics?.evolution?.genetic_diversity?.average_inbreeding_coefficient ?? 0).toFixed(3)}
+                  </div>
+                </div>
+                <div style={{ background: 'rgba(255, 255, 255, 0.03)', padding: '6px 8px', borderRadius: '6px' }}>
+                  <span style={{ fontSize: '9px', color: '#94A3B8' }}>Tam. Efetivo Pop. (Ne)</span>
+                  <div style={{ fontSize: '13px', fontWeight: 700, color: '#FBBF24' }}>
+                    {metrics?.evolution?.genetic_diversity?.effective_population_size ?? 0}
+                  </div>
+                </div>
+                <div style={{ background: 'rgba(255, 255, 255, 0.03)', padding: '6px 8px', borderRadius: '6px' }}>
+                  <span style={{ fontSize: '9px', color: '#94A3B8' }}>Linhagens Ativas</span>
+                  <div style={{ fontSize: '13px', fontWeight: 700, color: '#C084FC' }}>
+                    {metrics?.evolution?.genetic_diversity?.unique_lineages ?? 0} linhagens
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Evolução de Atributos por Geração */}
+            <div>
+              <span style={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', color: '#94A3B8' }}>
+                Médias Alélicas por Geração
+              </span>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '6px' }}>
+                {metrics?.evolution?.generations && Object.keys(metrics.evolution.generations).length > 0 ? (
+                  Object.values(metrics.evolution.generations).map((g) => (
+                    <div
+                      key={g.generation}
+                      style={{
+                        background: 'rgba(15, 23, 42, 0.6)',
+                        border: '1px solid rgba(255, 255, 255, 0.05)',
+                        borderRadius: '6px',
+                        padding: '8px 10px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '4px',
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: '11px', fontWeight: 700, color: '#F8FAFC' }}>
+                          Geração {g.generation}
+                        </span>
+                        <span style={{ fontSize: '10px', color: '#94A3B8' }}>
+                          {g.alive} vivos / {g.total_born} nascidos
+                        </span>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '4px', fontSize: '9px', textAlign: 'center' }}>
+                        <div style={{ background: 'rgba(244, 63, 94, 0.1)', padding: '3px', borderRadius: '4px', color: '#FDA4AF' }}>
+                          Força: <strong>{g.avg_forca.toFixed(1)}</strong>
+                        </div>
+                        <div style={{ background: 'rgba(56, 189, 248, 0.1)', padding: '3px', borderRadius: '4px', color: '#7DD3FC' }}>
+                          Velocidade: <strong>{g.avg_velocidade.toFixed(1)}</strong>
+                        </div>
+                        <div style={{ background: 'rgba(16, 185, 129, 0.1)', padding: '3px', borderRadius: '4px', color: '#6EE7B7' }}>
+                          Resistência: <strong>{g.avg_resistencia.toFixed(1)}</strong>
+                        </div>
+                        <div style={{ background: 'rgba(168, 85, 247, 0.1)', padding: '3px', borderRadius: '4px', color: '#D8B4FE' }}>
+                          Coleta: <strong>{g.avg_coleta.toFixed(1)}</strong>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div style={{ fontSize: '11px', color: '#64748B', textAlign: 'center', padding: '12px' }}>
+                    Coletando dados intergeracionais...
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Linhagens Ativas */}
+            <div>
+              <span style={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', color: '#94A3B8' }}>
+                Linhagens Familiares no Ecossistema
+              </span>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '6px' }}>
+                {metrics?.evolution?.lineages && metrics.evolution.lineages.length > 0 ? (
+                  metrics.evolution.lineages.map((lin) => (
+                    <div
+                      key={lin.id}
+                      style={{
+                        background: 'rgba(15, 23, 42, 0.5)',
+                        border: '1px solid rgba(255, 255, 255, 0.05)',
+                        borderRadius: '6px',
+                        padding: '6px 8px',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontSize: '11px', fontWeight: 600, color: '#F8FAFC' }}>
+                          {lin.name}
+                        </div>
+                        <div style={{ fontSize: '9px', color: '#94A3B8' }}>
+                          ID: {lin.id} • Gen Média: {lin.avg_generation.toFixed(1)}
+                        </div>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <span style={{ fontSize: '10px', fontWeight: 700, color: '#38BDF8' }}>
+                          {lin.active_members} animais
+                        </span>
+                        <div style={{ fontSize: '9px', color: '#A855F7' }}>
+                          Het: {(lin.avg_heterozygosity * 100).toFixed(0)}%
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div style={{ fontSize: '11px', color: '#64748B', textAlign: 'center', padding: '10px' }}>
+                    Nenhuma linhagem ativa registrada.
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Mortalidade por Causa */}
+            <div>
+              <span style={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', color: '#94A3B8' }}>
+                Mortalidade Populacional por Causa
+              </span>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px', marginTop: '6px' }}>
+                {metrics?.evolution?.mortality_by_cause && Object.keys(metrics.evolution.mortality_by_cause).length > 0 ? (
+                  Object.entries(metrics.evolution.mortality_by_cause).map(([cause, count]) => (
+                    <div
+                      key={cause}
+                      style={{
+                        background: 'rgba(244, 63, 94, 0.08)',
+                        border: '1px solid rgba(244, 63, 94, 0.2)',
+                        padding: '6px',
+                        borderRadius: '6px',
+                        textAlign: 'center',
+                      }}
+                    >
+                      <div style={{ fontSize: '9px', color: '#94A3B8' }}>{cause}</div>
+                      <div style={{ fontSize: '13px', fontWeight: 700, color: '#FDA4AF' }}>{count}</div>
+                    </div>
+                  ))
+                ) : (
+                  <div style={{ gridColumn: 'span 3', fontSize: '11px', color: '#64748B', textAlign: 'center', padding: '8px' }}>
+                    Nenhum óbito registrado até o momento.
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Correlação Estatística de Sobrevivência */}
+            <div
+              style={{
+                background: 'rgba(15, 23, 42, 0.7)',
+                border: '1px solid rgba(255, 255, 255, 0.08)',
+                borderRadius: '8px',
+                padding: '10px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '8px',
+              }}
+            >
+              <span style={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', color: '#94A3B8' }}>
+                Correlação de Sobrevivência (Adultos Vivos vs Falecidos)
+              </span>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '10px' }}>
+                <div style={{ background: 'rgba(255, 255, 255, 0.02)', padding: '6px 8px', borderRadius: '4px' }}>
+                  <div style={{ color: '#94A3B8' }}>Força Média</div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '2px' }}>
+                    <span style={{ color: '#34D399' }}>Vivos: {metrics?.evolution?.trait_survival_correlation?.surviving_adults_avg_forca?.toFixed(1) ?? '—'}</span>
+                    <span style={{ color: '#F87171' }}>Óbitos: {metrics?.evolution?.trait_survival_correlation?.deceased_avg_forca?.toFixed(1) ?? '—'}</span>
+                  </div>
+                </div>
+                <div style={{ background: 'rgba(255, 255, 255, 0.02)', padding: '6px 8px', borderRadius: '4px' }}>
+                  <div style={{ color: '#94A3B8' }}>Velocidade Média</div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '2px' }}>
+                    <span style={{ color: '#34D399' }}>Vivos: {metrics?.evolution?.trait_survival_correlation?.surviving_adults_avg_velocidade?.toFixed(1) ?? '—'}</span>
+                    <span style={{ color: '#F87171' }}>Óbitos: {metrics?.evolution?.trait_survival_correlation?.deceased_avg_velocidade?.toFixed(1) ?? '—'}</span>
+                  </div>
+                </div>
+              </div>
+              <div style={{ fontSize: '9px', color: '#64748B', fontStyle: 'italic', lineHeight: '1.3' }}>
+                * Nota metodológica: Apresentado como evidência empírica observada no ambiente simulado, e não como prova mecânica direta de causalidade exclusiva.
+              </div>
+            </div>
           </div>
         )}
 
@@ -909,6 +2264,16 @@ export const MetricsPanel: React.FC<MetricsPanelProps> = ({
                   icon = '🛡️';
                   title = 'Defesa Parental';
                   desc = `${ev.mother_name || 'Mãe'} interceptou o predador ${ev.predator_name} para proteger a prole!`;
+                } else if (ev.type === 'vranco_collective_defense') {
+                  badgeColor = '#F59E0B';
+                  icon = '🛡️';
+                  title = 'Defesa Coletiva (Mobbing)';
+                  desc = `Bando de ${ev.participants_count || 4} Vrancos confrontou e repeliu ${ev.predator_name} (-${ev.damage} HP)!`;
+                } else if (ev.type === 'predator_defeated') {
+                  badgeColor = '#10B981';
+                  icon = '⚡';
+                  title = 'Predador Vencido / Abatido';
+                  desc = `${ev.predator_name} foi derrotado pela união defensiva dos Vrancos!`;
                 } else if (ev.type === 'orphan_adopted') {
                   badgeColor = '#8B5CF6';
                   icon = '🤝';
@@ -1069,24 +2434,46 @@ export const MetricsPanel: React.FC<MetricsPanelProps> = ({
             </div>
 
             {/* Filtros de Habitantes */}
-            <div style={{ display: 'flex', gap: '4px', marginTop: '4px' }}>
-              {(['all', 'M', 'F', 'C'] as const).map((role) => (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '4px', marginTop: '4px' }}>
+              {(
+                [
+                  { key: 'all', label: 'Todos' },
+                  { key: 'V', label: '⚡ Vrancos' },
+                  { key: 'P', label: '🐺 Predadores' },
+                  { key: 'M', label: 'Machos' },
+                  { key: 'F', label: 'Fêmeas' },
+                  { key: 'C', label: 'Filhotes' },
+                ] as const
+              ).map((f) => (
                 <button
-                  key={role}
-                  onClick={() => setInhabitantFilter(role)}
+                  key={f.key}
+                  onClick={() => setInhabitantFilter(f.key)}
                   style={{
-                    flex: 1,
                     padding: '4px',
-                    fontSize: '10px',
+                    fontSize: '9px',
                     fontWeight: 700,
                     borderRadius: '5px',
                     border: '1px solid rgba(255, 255, 255, 0.1)',
-                    background: inhabitantFilter === role ? 'rgba(56, 189, 248, 0.25)' : 'rgba(255, 255, 255, 0.04)',
-                    color: inhabitantFilter === role ? '#38BDF8' : 'var(--color-text-muted)',
+                    background:
+                      inhabitantFilter === f.key
+                        ? f.key === 'V'
+                          ? 'rgba(245, 158, 11, 0.3)'
+                          : f.key === 'P'
+                          ? 'rgba(16, 185, 129, 0.3)'
+                          : 'rgba(56, 189, 248, 0.25)'
+                        : 'rgba(255, 255, 255, 0.04)',
+                    color:
+                      inhabitantFilter === f.key
+                        ? f.key === 'V'
+                          ? '#FDE047'
+                          : f.key === 'P'
+                          ? '#6EE7B7'
+                          : '#38BDF8'
+                        : 'var(--color-text-muted)',
                     cursor: 'pointer',
                   }}
                 >
-                  {role === 'all' ? 'Todos' : role === 'M' ? 'Machos' : role === 'F' ? 'Fêmeas' : 'Filhotes'}
+                  {f.label}
                 </button>
               ))}
             </div>
@@ -1095,39 +2482,41 @@ export const MetricsPanel: React.FC<MetricsPanelProps> = ({
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '280px', overflowY: 'auto' }}>
               {filteredOrganisms.map((org) => {
                 const clan = getClanName(org.fam);
-                const roleDot = org.r === 'M' ? '#34D399' : org.r === 'F' ? '#FB7185' : '#C084FC';
-                    const stageLabel = org.st === 'N' ? '🐣 Recém-nascido' : org.st === 'D' ? '🌱 Em desenv.' : org.st === 'J' ? '🐾 Jovem' : org.st === 'I' ? '🏹 Indep.' : '👑 Adulto';
-                    const hasCarriedFood = org.cf && org.cf > 0.5;
-                    return (
-                      <div
-                        key={org.id}
-                        onClick={() => onSelectOrganism(org.id)}
-                        style={{
-                          background: 'rgba(15, 23, 42, 0.6)',
-                          border: '1px solid rgba(255, 255, 255, 0.05)',
-                          padding: '8px 10px',
-                          borderRadius: '6px',
-                          cursor: 'pointer',
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center',
-                          transition: 'all 0.15s ease',
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.borderColor = 'rgba(56, 189, 248, 0.4)';
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.05)';
-                        }}
-                      >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: roleDot, display: 'inline-block' }} />
-                          <div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                              <span style={{ fontSize: '11px', fontWeight: 700, color: '#F8FAFC' }}>{org.nm}</span>
-                              <span style={{ fontSize: '8px', padding: '0px 3px', borderRadius: '3px', background: 'rgba(255, 255, 255, 0.06)', color: '#CBD5E1' }}>
-                                {stageLabel}
-                              </span>
+                const isVranco = org.sp === 'V';
+                const roleDot = isVranco ? '#F59E0B' : (org.r === 'M' ? '#34D399' : org.r === 'F' ? '#FB7185' : '#C084FC');
+                const stageLabel = org.st === 'N' ? '🐣 Recém-nascido' : org.st === 'D' ? '🌱 Em desenv.' : org.st === 'J' ? '🐾 Jovem' : org.st === 'I' ? '🏹 Indep.' : '👑 Adulto';
+                const hasCarriedFood = org.cf && org.cf > 0.5;
+                return (
+                  <div
+                    key={org.id}
+                    onClick={() => onSelectOrganism(org.id)}
+                    style={{
+                      background: 'rgba(15, 23, 42, 0.6)',
+                      border: '1px solid rgba(255, 255, 255, 0.05)',
+                      padding: '8px 10px',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      transition: 'all 0.15s ease',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.borderColor = 'rgba(56, 189, 248, 0.4)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.05)';
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: roleDot, display: 'inline-block' }} />
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                          <span style={{ fontSize: '10px' }}>{isVranco ? '⚡' : '🐺'}</span>
+                          <span style={{ fontSize: '11px', fontWeight: 700, color: '#F8FAFC' }}>{org.nm}</span>
+                          <span style={{ fontSize: '8px', padding: '0px 3px', borderRadius: '3px', background: 'rgba(255, 255, 255, 0.06)', color: '#CBD5E1' }}>
+                            {stageLabel}
+                          </span>
                               {hasCarriedFood && (
                                 <span style={{ fontSize: '8px', color: '#FCD34D', fontWeight: 700 }}>
                                   🌾 {Math.round(org.cf!)}

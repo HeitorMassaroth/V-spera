@@ -6,6 +6,7 @@
 export interface CompactOrganism {
   id: number;
   nm: string;  // Nome gerado
+  sp?: 'V' | 'P'; // Raça: 'V' (Vranco), 'P' (Predador)
   x: number;
   y: number;
   vx: number;
@@ -92,6 +93,9 @@ export interface ClanInfo {
   }>;
   diplomacy: Record<string, 'NEUTRAL' | 'COOPERATION' | 'ALLIANCE' | 'COMPETITION' | 'HOSTILE' | 'WAR' | 'TRUCE'>;
   relations?: Record<string, string>;
+  alpha_approval_rating?: number;
+  has_legitimacy_crisis?: boolean;
+  crisis_ticks?: number;
   history_log: Array<
     | {
         type?: string;
@@ -141,6 +145,18 @@ export interface WorldMetrics {
   females_count?: number;
   males_count?: number;
   children_count?: number;
+  vrancos_count?: number;
+  predators_count?: number;
+  vranco_avg_group_size?: number;
+  vrancos_periphery_pct?: number;
+  predators_periphery_pct?: number;
+  flee_count?: number;
+  combat_count?: number;
+  collective_defenses_count?: number;
+  predation_attempts?: number;
+  predation_kills?: number;
+  predators_defeated?: number;
+  hunting_success_rate?: number;
   families_count?: number;
   family_homes_count?: number;
   bonded_pairs_count?: number;
@@ -149,10 +165,17 @@ export interface WorldMetrics {
   established_clans_count?: number;
   total_communal_food?: number;
   wars_count?: number;
+  settled_territories_count?: number;
+  contested_territories_count?: number;
+  degraded_territories_count?: number;
+  avg_territory_quality?: number;
   stage_stats?: StageStats;
   max_generation?: number;
   total_mutations?: number;
   attr_stats?: AttributeStats;
+  season?: SeasonInfo;
+  ecology?: EcologyMetrics;
+  evolution?: EvolutionMetrics;
 }
 
 export interface WorldEvent {
@@ -168,6 +191,8 @@ export interface WorldEvent {
     | 'partner_lost'
     | 'predation_attempt'
     | 'predation_kill'
+    | 'predator_defeated'
+    | 'vranco_collective_defense'
     | 'mother_defense'
     | 'orphan_adopted'
     | 'patriarch_joined'
@@ -183,10 +208,13 @@ export interface WorldEvent {
     | 'clan_war_declared'
     | 'clan_truce_agreed'
     | 'clan_expanded'
-    | 'communal_aid';
+    | 'communal_aid'
+    | 'season_changed';
   macho_name?: string;
   target_name?: string;
   damage?: number;
+  participants_count?: number;
+  collective_power?: number;
   parent_name?: string;
   child_name?: string;
   organism_name?: string;
@@ -215,6 +243,10 @@ export interface WorldEvent {
   urgency?: number;
   clan1_name?: string;
   clan2_name?: string;
+  season?: string;
+  season_name?: string;
+  icon?: string;
+  year?: number;
   reason?: string;
   message?: string;
   tick: number;
@@ -243,6 +275,101 @@ export interface FamilyInfo {
   is_active: boolean;
 }
 
+export interface TerritoryEventLog {
+  type: string;
+  description: string;
+  tick: number;
+}
+
+export interface TerritoryZoneInfo {
+  id: number;
+  name: string;
+  x: number;
+  y: number;
+  radius: number;
+  is_peripheral: boolean;
+  food_count: number;
+  biomass: number;
+  base_fertility: number;
+  current_fertility: number;
+  depletion_ticks: number;
+  recovery_ticks: number;
+  predator_count: number;
+  vranco_count: number;
+  shelter_count: number;
+  carrying_capacity: number;
+  occupants_count: number;
+  occupant_ids?: number[];
+  food_availability_score: number;
+  safety_score: number;
+  population_density: number;
+  competition_pressure: number;
+  quality_score: number;
+  controller_type: 'NONE' | 'FAMILY' | 'CLAN';
+  controlling_clan_id: number | null;
+  controlling_family_id: number | null;
+  status: 'UNCLAIMED' | 'SETTLED' | 'CONTESTED' | 'DEGRADED' | 'ABANDONED';
+  dispute_ticks: number;
+  abandoned_cooldown: number;
+  history_log: TerritoryEventLog[];
+}
+
+export interface SeasonInfo {
+  tick: number;
+  year: number;
+  season: 'SPRING' | 'SUMMER' | 'AUTUMN' | 'WINTER';
+  season_name: string;
+  season_icon: string;
+  season_desc: string;
+  season_tick: number;
+  season_duration: number;
+  season_progress: number;
+  temperature: number;
+  food_spawn_multiplier: number;
+  metabolic_cost_multiplier: number;
+  reproduction_cost_multiplier: number;
+  movement_cost_multiplier: number;
+  environmental_stress: number;
+  births_this_season: number;
+  deaths_this_season: number;
+  vrancos_births_season: number;
+  vrancos_deaths_season: number;
+  predators_births_season: number;
+  predators_deaths_season: number;
+  food_consumed_season: number;
+  food_spawned_season: number;
+  season_history?: Array<{
+    year: number;
+    season: string;
+    season_name: string;
+    births: number;
+    deaths: number;
+    vrancos_births: number;
+    vrancos_deaths: number;
+    predators_births: number;
+    predators_deaths: number;
+    food_consumed: number;
+    food_spawned: number;
+  }>;
+}
+
+export interface EcologyMetrics {
+  total_biomass: number;
+  food_biomass: number;
+  animal_biomass: number;
+  carrying_capacity: number;
+  carrying_capacity_ratio: number;
+  is_overpopulated: boolean;
+  consumption_rate: number;
+  regeneration_rate: number;
+  biomass_balance: number;
+  critical_regions_count: number;
+  predator_prey_ratio: number;
+  seasonal_growth_rate: number;
+  vrancos_count: number;
+  predators_count: number;
+}
+
 export interface SimulationStateMessage {
   t: number;
   orgs: CompactOrganism[];
@@ -252,8 +379,12 @@ export interface SimulationStateMessage {
   families?: FamilyInfo[];
   nests?: NestInfo[];
   clans?: ClanInfo[];
+  territories?: TerritoryZoneInfo[];
+  season?: SeasonInfo;
+  ecology?: EcologyMetrics;
   metrics: WorldMetrics;
   events?: WorldEvent[];
+  chronicle?: ChronicleEvent[];
   status: 'RUNNING' | 'PAUSED' | 'STOPPED';
   tps: number;
 }
@@ -290,17 +421,34 @@ export interface GeneticHistoryItem {
 }
 
 export interface AnimalPersonality {
+  coragem?: number;
   agressividade: number;
   sociabilidade: number;
-  cautela: number;
   curiosidade: number;
-  instinto_protecao: number;
-  eficiencia_coleta: number;
-  exploracao: number;
-  fertilidade: number;
+  cautela: number;
+  protecao?: number;
+  instinto_protecao?: number;
+  persistencia?: number;
+  eficiencia_coleta?: number;
+  exploracao?: number;
+  fertilidade?: number;
+}
+
+export interface EpisodicMemory {
+  event_type: string;
+  description: string;
+  tick: number;
+  x: number;
+  y: number;
+  intensity: number;
+  relevance: number;
+  involved_id?: number | null;
+  involved_name?: string | null;
 }
 
 export interface AnimalMemory {
+  episodes?: EpisodicMemory[];
+  max_episodes?: number;
   known_food_sources: [number, number, number][];
   danger_zones: [number, number, number][];
   lost_relatives: { name: string; tick: number; cause: string }[];
@@ -310,6 +458,7 @@ export interface AnimalMemory {
 export interface AnimalRecord {
   id: number;
   name: string;
+  species?: string;
   role: string;
   sex?: string;
   life_stage?: string;
@@ -349,10 +498,92 @@ export interface FamilyTreeData {
   children: AnimalRecord[];
 }
 
+export interface AllelePairInfo {
+  maternal: number;
+  paternal: number;
+  value: number;
+  heterozygosity: number;
+}
+
+export interface GenotypeInfo {
+  pairs: Record<string, AllelePairInfo>;
+  inbreeding_coefficient: number;
+  lineage_id: string | number;
+  lineage_name: string;
+  average_heterozygosity: number;
+}
+
+export interface PhenotypeInfo {
+  forca: number;
+  velocidade: number;
+  resistencia: number;
+  eficiencia_metabolica: number;
+  eficiencia_coleta: number;
+  deteccao_ameacas: number;
+  resistencia_doencas: number;
+  fertilidade: number;
+  longevidade_potencial: number;
+  adaptabilidade: number;
+  sociabilidade: number;
+  agressividade: number;
+  cautela: number;
+  instinto_protecao: number;
+  max_saude: number;
+  ontogeny_factor: number;
+  health_factor: number;
+  inbreeding_penalty: number;
+}
+
+export interface EvolutionMetrics {
+  active_population_count: number;
+  total_records: number;
+  genetic_diversity: {
+    average_heterozygosity: number;
+    average_inbreeding_coefficient: number;
+    effective_population_size: number;
+    unique_lineages: number;
+  };
+  generations: Record<string, {
+    generation: number;
+    total_born: number;
+    alive: number;
+    avg_forca: number;
+    avg_velocidade: number;
+    avg_resistencia: number;
+    avg_coleta: number;
+    avg_deteccao: number;
+    avg_inbreeding: number;
+  }>;
+  lineages: Array<{
+    id: string | number;
+    name: string;
+    active_members: number;
+    avg_generation: number;
+    avg_heterozygosity: number;
+  }>;
+  mortality_by_cause: Record<string, number>;
+  trait_survival_correlation: {
+    surviving_adults_avg_forca?: number;
+    deceased_avg_forca?: number;
+    surviving_adults_avg_velocidade?: number;
+    deceased_avg_velocidade?: number;
+  };
+  clan_differences: Array<{
+    clan_id: number;
+    clan_name: string;
+    member_count: number;
+    avg_forca: number;
+    avg_velocidade: number;
+    avg_sociabilidade: number;
+    avg_inbreeding: number;
+  }>;
+}
+
 export interface OrganismDetailResponse {
   family_tree: FamilyTreeData;
   is_alive: boolean;
   current_stats?: {
+    species?: string;
     age: number;
     saude: number;
     energy: number;
@@ -375,6 +606,69 @@ export interface OrganismDetailResponse {
     clan_id?: number | null;
     clan_role?: string | null;
     leadership_score?: number;
+    genotype?: GenotypeInfo | Record<string, any>;
+    phenotype?: PhenotypeInfo | Record<string, any>;
+    current_state_info?: Record<string, any>;
+    inbreeding_coefficient?: number;
+    lineage_id?: string | number;
+    lineage_name?: string;
+    relationships?: SocialRelationshipInfo[];
   } | null;
   population_averages?: AttributeStats;
+  evolution?: EvolutionMetrics;
+  chronicle?: ChronicleEvent[];
 }
+
+export interface SocialRelationshipInfo {
+  target_id: number;
+  target_name: string;
+  target_species: string;
+  trust: number;
+  affinity: number;
+  fear: number;
+  rivalry: number;
+  hostility: number;
+  cooperation_count: number;
+  last_interaction_tick: number;
+  status_label: string;
+}
+
+export interface ChronicleEvent {
+  id: number;
+  tick: number;
+  year: number;
+  event_type: string;
+  title: string;
+  description: string;
+  cause: string;
+  result: string;
+  importance: number;
+  location?: [number, number] | null;
+  zone_id?: number | null;
+  zone_name?: string | null;
+  primary_organism_id?: number | null;
+  primary_organism_name?: string | null;
+  secondary_organism_id?: number | null;
+  secondary_organism_name?: string | null;
+  involved_organism_ids?: number[];
+  clan_id?: number | null;
+  clan_name?: string | null;
+  secondary_clan_id?: number | null;
+  secondary_clan_name?: string | null;
+  species?: string | null;
+  related_event_ids?: number[];
+  metadata?: Record<string, any>;
+}
+
+export interface ChronicleTimelineResponse {
+  total: number;
+  limit: number;
+  offset: number;
+  events: ChronicleEvent[];
+}
+
+export interface ChronicleEventDetailResponse {
+  event: ChronicleEvent;
+  related_events: ChronicleEvent[];
+}
+

@@ -1,5 +1,6 @@
 import React from 'react';
 import { Play, Pause, SkipForward, RotateCcw, SlidersHorizontal, Activity, Wifi, WifiOff } from 'lucide-react';
+import type { SeasonInfo } from '../types';
 
 interface TopBarProps {
   connected: boolean;
@@ -7,6 +8,7 @@ interface TopBarProps {
   tps: number;
   tick: number;
   isExtinct: boolean;
+  season?: SeasonInfo | null;
   onPlay: () => void;
   onPause: () => void;
   onStep: () => void;
@@ -21,6 +23,7 @@ export const TopBar: React.FC<TopBarProps> = ({
   tps,
   tick,
   isExtinct,
+  season,
   onPlay,
   onPause,
   onStep,
@@ -117,6 +120,82 @@ export const TopBar: React.FC<TopBarProps> = ({
           />
           {isExtinct ? 'POPULAÇÃO EXTINTA' : status === 'RUNNING' ? 'SIMULANDO' : 'PAUSADO'}
         </div>
+
+        {/* Season & Climate Indicator */}
+        {season && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '4px 12px',
+              borderRadius: '999px',
+              fontSize: '11px',
+              fontWeight: 600,
+              background:
+                season.season === 'SPRING'
+                  ? 'rgba(16, 185, 129, 0.12)'
+                  : season.season === 'SUMMER'
+                  ? 'rgba(245, 158, 11, 0.12)'
+                  : season.season === 'AUTUMN'
+                  ? 'rgba(234, 88, 12, 0.12)'
+                  : 'rgba(56, 189, 248, 0.12)',
+              border: `1px solid ${
+                season.season === 'SPRING'
+                  ? 'rgba(16, 185, 129, 0.35)'
+                  : season.season === 'SUMMER'
+                  ? 'rgba(245, 158, 11, 0.35)'
+                  : season.season === 'AUTUMN'
+                  ? 'rgba(234, 88, 12, 0.35)'
+                  : 'rgba(56, 189, 248, 0.35)'
+              }`,
+              color:
+                season.season === 'SPRING'
+                  ? '#34D399'
+                  : season.season === 'SUMMER'
+                  ? '#FBBF24'
+                  : season.season === 'AUTUMN'
+                  ? '#FB923C'
+                  : '#38BDF8',
+            }}
+            title={`${season.season_name} (Ano ${season.year}): ${season.season_desc} | Temp: ${season.temperature.toFixed(1)}°C | Spawn: ${season.food_spawn_multiplier.toFixed(2)}x | Gasto: ${season.metabolic_cost_multiplier.toFixed(2)}x`}
+          >
+            <span style={{ fontSize: '13px' }}>{season.season_icon}</span>
+            <span style={{ fontWeight: 700, letterSpacing: '0.02em' }}>
+              {season.season_name} · Ano {season.year}
+            </span>
+            <span
+              style={{
+                fontSize: '10px',
+                padding: '1px 5px',
+                borderRadius: '4px',
+                background: 'rgba(255, 255, 255, 0.1)',
+                fontFamily: 'JetBrains Mono, monospace',
+              }}
+            >
+              {season.temperature.toFixed(1)}°C
+            </span>
+            <div
+              style={{
+                width: '38px',
+                height: '4px',
+                borderRadius: '2px',
+                background: 'rgba(255, 255, 255, 0.15)',
+                overflow: 'hidden',
+              }}
+              title={`Progresso da Estação: ${Math.round(season.season_progress * 100)}%`}
+            >
+              <div
+                style={{
+                  width: `${Math.round(season.season_progress * 100)}%`,
+                  height: '100%',
+                  background: 'currentColor',
+                  transition: 'width 0.3s ease',
+                }}
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Control Buttons */}

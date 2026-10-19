@@ -25,6 +25,7 @@ class AnimalRecord:
     partner_id: Optional[int] = None
     partner_bond_duration: int = 0
     family_id: Optional[int] = None
+    species: str = "PREDATOR"
     inbreeding_coefficient: float = 0.0
     lineage_id: str = "L0"
     lineage_name: str = "Ancestral"
@@ -40,6 +41,7 @@ class AnimalRecord:
             "role": self.role,
             "sex": self.sex,
             "life_stage": self.life_stage,
+            "species": self.species,
             "generation": self.generation,
             "birth_tick": self.birth_tick,
             "death_tick": self.death_tick,
@@ -67,6 +69,7 @@ class AnimalRecord:
             role=data["role"],
             sex=data.get("sex", "M"),
             life_stage=data.get("life_stage", "ADULT"),
+            species=data.get("species", "PREDATOR"),
             generation=data["generation"],
             birth_tick=data["birth_tick"],
             death_tick=data.get("death_tick"),
@@ -109,6 +112,7 @@ class GenealogyRegistry:
         personality: Optional[AnimalPersonality] = None,
         sex: Optional[str] = None,
         life_stage: Optional[str] = None,
+        species: str = "PREDATOR",
         inbreeding_coefficient: float = 0.0,
         lineage_id: str = "L0",
         lineage_name: str = "Ancestral",
@@ -122,6 +126,7 @@ class GenealogyRegistry:
             role=role,
             sex=computed_sex,
             life_stage=computed_stage,
+            species=species,
             generation=generation,
             birth_tick=birth_tick,
             death_tick=None,

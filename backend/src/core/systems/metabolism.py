@@ -21,8 +21,14 @@ class MetabolismSystem:
         self.k_mov = float(k_mov)
         self.k_vis = float(k_vis)
 
-    def calculate_cost(self, organism: Organism, dt: float = 1.0) -> float:
-        """Calcula o débito energético total no ciclo com compensações biológicas: basal + cinético + sensorial."""
+    def calculate_cost(
+        self,
+        organism: Organism,
+        dt: float = 1.0,
+        season_metabolic_mult: float = 1.0,
+        temperature: float = 20.0,
+    ) -> float:
+        """Calcula o débito energético total no ciclo: basal + cinético + sensorial + estresse térmico sazonal."""
         size_factor = organism.traits.size / 5.0
         pheno = getattr(organism, "phenotype", None)
 
@@ -38,13 +44,31 @@ class MetabolismSystem:
         vis_factor = (0.80 + 0.40 * (pheno.deteccao_ameacas / 50.0)) if pheno else 1.0
         cost_vis = self.k_vis * organism.traits.vision_radius * vis_factor
 
-        # Total modulado pela eficiência metabólica do genótipo/fenótipo
-        total = (cost_basal + cost_mov + cost_vis) * organism.traits.metabolic_efficiency * dt
+        # Custo de termorregulação no frio (inverno): organismos com maior resistência e adaptabilidade amortecem o frio
+        thermo_cost = 0.0
+        if temperature < 18.0:
+            cold_intensity = (18.0 - temperature) / 18.0
+            res = getattr(organism.genome, "resistencia", 50.0) if hasattr(organism, "genome") else 50.0
+            adapt = getattr(organism.genome, "adaptabilidade", 50.0) if hasattr(organism, "genome") else 50.0
+            insulation = min(0.70, (res * 0.5 + adapt * 0.5) / 100.0)
+            thermo_cost = self.k_basal * 0.75 * cold_intensity * (1.0 - insulation) * (size_factor ** 2)
+
+        # Custo adicional por exaustão térmica no calor extremo
+        heat_cost = (cost_mov * 0.15) if (temperature > 28.0 and organism.speed > 0.5) else 0.0
+
+        # Total modulado pela eficiência metabólica do genótipo e multiplicador da estação
+        total = (cost_basal + cost_mov + cost_vis + thermo_cost + heat_cost) * organism.traits.metabolic_efficiency * season_metabolic_mult * dt
         return max(0.001, total)
 
-    def apply_metabolism(self, organism: Organism, dt: float = 1.0) -> float:
+    def apply_metabolism(
+        self,
+        organism: Organism,
+        dt: float = 1.0,
+        season_metabolic_mult: float = 1.0,
+        temperature: float = 20.0,
+    ) -> float:
         """Deduz a energia metabólica calculada do organismo."""
-        cost = self.calculate_cost(organism, dt)
+        cost = self.calculate_cost(organism, dt, season_metabolic_mult, temperature)
         organism.energy -= cost
         return cost
 
@@ -76,9 +100,22 @@ class MetabolismSystem:
                 organism.food_eaten += 1
                 consumed.append(food)
 
-                # Registra fonte de alimento na memória episódica
+                # Registra fonte de alimento na memória espacial e episódica
                 if getattr(organism, "memory", None):
-                    organism.memory.add_food_source(food.x, food.y, getattr(organism, "age", 0))
+                    cur_age = getattr(organism, "age", 0)
+                    organism.memory.add_food_source(food.x, food.y, cur_age)
+                    if organism.energy < 75.0:
+                        last_found = [ep for ep in organism.memory.episodes if ep.event_type == "FOUND_FOOD"]
+                        if not last_found or (cur_age - last_found[-1].tick >= 20):
+                            organism.memory.add_episode(
+                                event_type="FOUND_FOOD",
+                                description=f"Encontrou alimento ({int(food.energy_value)} kcal)",
+                                tick=cur_age,
+                                x=food.x,
+                                y=food.y,
+                                intensity=min(1.0, 0.4 + (100.0 - organism.energy) / 100.0 * 0.6),
+                                relevance=0.75,
+                            )
 
         return consumed
 

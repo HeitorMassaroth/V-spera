@@ -3,13 +3,14 @@
  * Visualização da simulação VÉSPERA: Organismos simplificados, combate dinâmico e oásis de clãs.
  */
 
-import type { CompactOrganism, CompactFood, WorldEvent, NestInfo, ClanInfo } from '../types';
+import type { CompactOrganism, CompactFood, WorldEvent, NestInfo, ClanInfo, TerritoryZoneInfo, SeasonInfo } from '../types';
 import { getClanName } from '../types';
 
 export interface RenderOptions {
   showSensoryRadius: boolean;
   showVelocityVectors: boolean;
   showGridLines: boolean;
+  showTerritories?: boolean;
   worldWidth: number;
   worldHeight: number;
 }
@@ -136,6 +137,26 @@ export class WorldRenderer {
             maxLife: 30,
             type: 'combat',
           });
+        } else if (ev.type === 'vranco_collective_defense' && ev.x !== undefined && ev.y !== undefined) {
+          this.sparks.push({
+            x: ev.x,
+            y: ev.y,
+            text: `🛡️ Mobbing Vranco! (-${ev.damage?.toFixed(1) || 'repel'})`,
+            color: '#F59E0B',
+            life: 40,
+            maxLife: 40,
+            type: 'combat',
+          });
+        } else if (ev.type === 'predator_defeated' && ev.x !== undefined && ev.y !== undefined) {
+          this.sparks.push({
+            x: ev.x,
+            y: ev.y,
+            text: '⚔️ Predador Vencido!',
+            color: '#34D399',
+            life: 45,
+            maxLife: 45,
+            type: 'combat',
+          });
         } else if (ev.type === 'clan_formed' && ev.x !== undefined && ev.y !== undefined) {
           this.sparks.push({
             x: ev.x,
@@ -214,7 +235,9 @@ export class WorldRenderer {
     events?: WorldEvent[],
     currentTick: number = 0,
     nests?: NestInfo[],
-    clans?: ClanInfo[]
+    clans?: ClanInfo[],
+    territories?: TerritoryZoneInfo[],
+    season?: SeasonInfo | null
   ) {
     const ctx = this.ctx;
     ctx.save();
@@ -229,8 +252,13 @@ export class WorldRenderer {
     ctx.translate(this.offsetX, this.offsetY);
     ctx.scale(this.scale, this.scale);
 
-    // 1. Limites do ecossistema e grade espacial
-    this.renderWorldBoundsAndGrid(ctx, options.worldWidth, options.worldHeight, options.showGridLines);
+    // 1. Limites do ecossistema e grade espacial com iluminação ambiental da estação
+    this.renderWorldBoundsAndGrid(ctx, options.worldWidth, options.worldHeight, options.showGridLines, season);
+
+    // 1.5 Territórios Regionais e Indicadores de Qualidade Ecológica
+    if (options.showTerritories !== false) {
+      this.renderTerritoryZones(ctx, territories, currentTick);
+    }
 
     // 2. Territórios Estratégicos de Clãs e Alianças Coletivas
     this.renderClanTerritories(ctx, clans, currentTick);
@@ -249,6 +277,117 @@ export class WorldRenderer {
 
     // 5. Efeitos visuais de combate e cuidado parental
     this.renderSparks(ctx);
+
+    ctx.restore();
+  }
+
+  /**
+   * Renderiza as 8 Regiões Territoriais, Qualidade Ecológica, Áreas Disputadas e Santuários Periféricos
+   */
+  private renderTerritoryZones(
+    ctx: CanvasRenderingContext2D,
+    territories?: TerritoryZoneInfo[],
+    currentTick: number = 0
+  ) {
+    if (!territories || territories.length === 0) return;
+    ctx.save();
+
+    for (const zone of territories) {
+      const { x, y, radius, quality_score, status, name, food_count, occupants_count, carrying_capacity, safety_score, is_peripheral } = zone;
+
+      // Determinação estética por status político e qualidade ambiental
+      let strokeColor = 'rgba(56, 189, 248, 0.45)';
+      let fillColor = 'rgba(56, 189, 248, 0.05)';
+      let statusTag = '🗺️ LIVRE';
+      let tagBg = 'rgba(15, 23, 42, 0.88)';
+      let pulse = 0;
+
+      if (status === 'CONTESTED') {
+        pulse = Math.sin(currentTick * 0.18) * 5;
+        strokeColor = 'rgba(239, 68, 68, 0.88)';
+        fillColor = 'rgba(239, 68, 68, 0.14)';
+        statusTag = '⚔️ DISPUTA ATIVA';
+        tagBg = 'rgba(69, 10, 10, 0.92)';
+      } else if (status === 'DEGRADED') {
+        strokeColor = 'rgba(148, 163, 184, 0.40)';
+        fillColor = 'rgba(100, 116, 139, 0.06)';
+        statusTag = '⚠️ DEGRADADO';
+        tagBg = 'rgba(30, 41, 59, 0.88)';
+      } else if (status === 'ABANDONED') {
+        strokeColor = 'rgba(217, 119, 6, 0.50)';
+        fillColor = 'rgba(217, 119, 6, 0.06)';
+        statusTag = '⏳ POUSIO';
+        tagBg = 'rgba(45, 26, 8, 0.88)';
+      } else if (status === 'SETTLED') {
+        strokeColor = 'rgba(16, 185, 129, 0.65)';
+        fillColor = 'rgba(16, 185, 129, 0.08)';
+        statusTag = is_peripheral ? '🛡️ SANTUÁRIO' : '🏰 HABITADO';
+        tagBg = 'rgba(6, 44, 30, 0.90)';
+      } else {
+        // UNCLAIMED
+        if (is_peripheral) {
+          strokeColor = 'rgba(139, 92, 246, 0.45)';
+          fillColor = 'rgba(139, 92, 246, 0.05)';
+          statusTag = '🌿 REFÚGIO';
+        }
+      }
+
+      const effectiveRadius = radius + pulse;
+
+      // 1. Halo expansivo de qualidade ecológica
+      const grad = ctx.createRadialGradient(x, y, 10, x, y, effectiveRadius);
+      grad.addColorStop(0, fillColor);
+      grad.addColorStop(0.75, fillColor);
+      grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+
+      ctx.beginPath();
+      ctx.arc(x, y, effectiveRadius, 0, Math.PI * 2);
+      ctx.fillStyle = grad;
+      ctx.fill();
+
+      // 2. Fronteira pontilhada territorial
+      ctx.beginPath();
+      ctx.arc(x, y, effectiveRadius, 0, Math.PI * 2);
+      ctx.strokeStyle = strokeColor;
+      ctx.lineWidth = status === 'CONTESTED' ? 2.2 : 1.4;
+      ctx.setLineDash(status === 'CONTESTED' ? [4, 4] : [8, 6]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // 3. Estandarte com nome e indicadores de qualidade
+      ctx.save();
+      ctx.font = 'bold 9px system-ui, -apple-system, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+
+      const title = `${name} [${statusTag}]`;
+      const subtitle = `⭐ ${quality_score.toFixed(0)}% • 🥩 ${food_count} • 👥 ${occupants_count}/${carrying_capacity} • 🛡️ ${(safety_score * 100).toFixed(0)}%`;
+
+      const titleWidth = ctx.measureText(title).width;
+      ctx.font = '8px system-ui, -apple-system, sans-serif';
+      const subWidth = ctx.measureText(subtitle).width;
+      const boxWidth = Math.max(titleWidth, subWidth) + 18;
+      const boxHeight = 26;
+      const badgeY = y - effectiveRadius - 16;
+
+      ctx.fillStyle = tagBg;
+      ctx.beginPath();
+      ctx.roundRect(x - boxWidth / 2, badgeY, boxWidth, boxHeight, 5);
+      ctx.fill();
+      ctx.strokeStyle = strokeColor;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      ctx.font = 'bold 9px system-ui, -apple-system, sans-serif';
+      ctx.fillStyle = status === 'CONTESTED' ? '#FCA5A5' : status === 'DEGRADED' ? '#CBD5E1' : '#FDE68A';
+      ctx.fillText(title, x, badgeY + 8);
+
+      ctx.font = '8px system-ui, -apple-system, sans-serif';
+      ctx.fillStyle = '#94A3B8';
+      ctx.fillText(subtitle, x, badgeY + 19);
+
+      ctx.restore();
+    }
 
     ctx.restore();
   }
@@ -510,10 +649,28 @@ export class WorldRenderer {
     ctx: CanvasRenderingContext2D,
     w: number,
     h: number,
-    showGrid: boolean
+    showGrid: boolean,
+    season?: SeasonInfo | null
   ) {
     ctx.fillStyle = '#0B111E';
     ctx.fillRect(0, 0, w, h);
+
+    // Iluminação ambiental suave e imersiva de acordo com a estação climática
+    if (season) {
+      if (season.season === 'SPRING') {
+        ctx.fillStyle = 'rgba(16, 185, 129, 0.035)';
+        ctx.fillRect(0, 0, w, h);
+      } else if (season.season === 'SUMMER') {
+        ctx.fillStyle = 'rgba(245, 158, 11, 0.04)';
+        ctx.fillRect(0, 0, w, h);
+      } else if (season.season === 'AUTUMN') {
+        ctx.fillStyle = 'rgba(234, 88, 12, 0.035)';
+        ctx.fillRect(0, 0, w, h);
+      } else if (season.season === 'WINTER') {
+        ctx.fillStyle = 'rgba(56, 189, 248, 0.045)';
+        ctx.fillRect(0, 0, w, h);
+      }
+    }
 
     if (showGrid) {
       ctx.strokeStyle = 'rgba(255, 255, 255, 0.03)';
@@ -531,7 +688,17 @@ export class WorldRenderer {
       ctx.stroke();
     }
 
-    ctx.strokeStyle = 'rgba(56, 189, 248, 0.3)';
+    const strokeColor = season
+      ? season.season === 'SPRING'
+        ? 'rgba(16, 185, 129, 0.35)'
+        : season.season === 'SUMMER'
+        ? 'rgba(245, 158, 11, 0.35)'
+        : season.season === 'AUTUMN'
+        ? 'rgba(234, 88, 12, 0.35)'
+        : 'rgba(56, 189, 248, 0.35)'
+      : 'rgba(56, 189, 248, 0.3)';
+
+    ctx.strokeStyle = strokeColor;
     ctx.lineWidth = 2.0;
     ctx.strokeRect(0, 0, w, h);
   }
@@ -601,16 +768,18 @@ export class WorldRenderer {
         let leaderPrefix = '';
         if (org.clr === 'A') leaderPrefix = '👑 [ALPHA] ';
         else if (org.clr === 'B') leaderPrefix = '⭐ [BETA] ';
-        const tagText = `${leaderPrefix}${org.nm || `Animal #${org.id}`}`;
+        const isVranco = org.sp === 'V';
+        const speciesPrefix = isVranco ? '⚡ [VRANCO] ' : '🐺 [PREDADOR] ';
+        const tagText = `${speciesPrefix}${leaderPrefix}${org.nm || `Animal #${org.id}`}`;
         const textWidth = ctx.measureText(tagText).width;
         ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
         ctx.beginPath();
         ctx.roundRect(org.x - textWidth / 2 - 5, org.y - org.sz - 20, textWidth + 10, 15, 4);
         ctx.fill();
-        ctx.strokeStyle = org.clr === 'A' ? '#FBBF24' : org.clr === 'B' ? '#93C5FD' : '#38BDF8';
+        ctx.strokeStyle = isVranco ? '#F59E0B' : (org.clr === 'A' ? '#FBBF24' : org.clr === 'B' ? '#93C5FD' : '#38BDF8');
         ctx.lineWidth = 1;
         ctx.stroke();
-        ctx.fillStyle = org.clr === 'A' ? '#FEF08A' : org.clr === 'B' ? '#DBEAFE' : '#F8FAFC';
+        ctx.fillStyle = isVranco ? '#FEF08A' : (org.clr === 'A' ? '#FEF08A' : org.clr === 'B' ? '#DBEAFE' : '#F8FAFC');
         ctx.fillText(tagText, org.x, org.y - org.sz - 9);
         ctx.restore();
       }
@@ -664,22 +833,55 @@ export class WorldRenderer {
       }
 
       // Determinação de cor base vibrante e pura
-      let mainColor = '#34D399'; // Verde
+      const isVranco = org.sp === 'V';
+      let mainColor = '#34D399'; // Predador Macho (Verde Esmeralda)
       let glowColor = '#10B981';
-      if (roleChar === 'F') {
-        mainColor = '#FB7185'; // Rosa
-        glowColor = '#F43F5E';
-      } else if (roleChar === 'C') {
-        mainColor = '#C084FC'; // Roxo
-        glowColor = '#A855F7';
+
+      if (isVranco) {
+        // Raça Vrancos: Tons dourados, âmbar e areia quentes e velozes
+        if (roleChar === 'F') {
+          mainColor = '#FB923C'; // Âmbar Coral
+          glowColor = '#EA580C';
+        } else if (roleChar === 'C') {
+          mainColor = '#FDE047'; // Ouro Pálido/Areia
+          glowColor = '#EAB308';
+        } else {
+          mainColor = '#F59E0B'; // Ouro Imperial
+          glowColor = '#D97706';
+        }
+      } else {
+        // Predadores Tradicionais
+        if (roleChar === 'F') {
+          mainColor = '#FB7185'; // Rosa Rubro
+          glowColor = '#F43F5E';
+        } else if (roleChar === 'C') {
+          mainColor = '#C084FC'; // Roxo
+          glowColor = '#A855F7';
+        }
       }
 
-      // Corpo celular biológico simplificado (Círculo perfeito ou elipse suave)
+      // Calda / Crista aerodinâmica distintiva para Vrancos (maior agilidade visual)
+      if (isVranco) {
+        ctx.beginPath();
+        ctx.moveTo(-org.sz * 0.5, 0);
+        ctx.lineTo(-org.sz * 1.5, -org.sz * 0.4);
+        ctx.lineTo(-org.sz * 1.1, 0);
+        ctx.lineTo(-org.sz * 1.5, org.sz * 0.4);
+        ctx.closePath();
+        ctx.fillStyle = glowColor;
+        ctx.fill();
+      }
+
+      // Corpo celular biológico simplificado
       ctx.beginPath();
-      ctx.ellipse(0, 0, org.sz * 1.15, org.sz * 0.95, 0, 0, Math.PI * 2);
+      if (isVranco) {
+        ctx.ellipse(0, 0, org.sz * 1.30, org.sz * 0.85, 0, 0, Math.PI * 2);
+      } else {
+        ctx.ellipse(0, 0, org.sz * 1.15, org.sz * 0.95, 0, 0, Math.PI * 2);
+      }
       ctx.fillStyle = mainColor;
       ctx.shadowColor = glowColor;
-      ctx.shadowBlur = isSelected ? 10 : 5;
+      ctx.shadowBlur = isSelected ? 12 : (isVranco ? 7 : 5);
       ctx.fill();
 
       // Borda sutil
