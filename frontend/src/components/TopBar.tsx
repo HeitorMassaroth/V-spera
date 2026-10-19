@@ -1,0 +1,288 @@
+import React from 'react';
+import { Play, Pause, SkipForward, RotateCcw, SlidersHorizontal, Activity, Wifi, WifiOff } from 'lucide-react';
+
+interface TopBarProps {
+  connected: boolean;
+  status: 'RUNNING' | 'PAUSED' | 'STOPPED';
+  tps: number;
+  tick: number;
+  isExtinct: boolean;
+  onPlay: () => void;
+  onPause: () => void;
+  onStep: () => void;
+  onReset: () => void;
+  onSpeedChange: (tps: number) => void;
+  onOpenConfig: () => void;
+}
+
+export const TopBar: React.FC<TopBarProps> = ({
+  connected,
+  status,
+  tps,
+  tick,
+  isExtinct,
+  onPlay,
+  onPause,
+  onStep,
+  onReset,
+  onSpeedChange,
+  onOpenConfig,
+}) => {
+  return (
+    <header
+      style={{
+        height: '64px',
+        padding: '0 24px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        borderBottom: '1px solid var(--border-subtle)',
+        background: 'rgba(10, 15, 26, 0.95)',
+        backdropFilter: 'blur(10px)',
+        zIndex: 50,
+      }}
+    >
+      {/* Brand & Status */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div
+            style={{
+              width: '32px',
+              height: '32px',
+              borderRadius: '8px',
+              background: 'linear-gradient(135deg, #0284C7, #10B981)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: '0 0 16px rgba(56, 189, 248, 0.35)',
+            }}
+          >
+            <Activity size={18} color="#FFFFFF" />
+          </div>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '18px', fontWeight: 800, letterSpacing: '0.08em', color: '#F8FAFC' }}>
+                VÉSPERA
+              </span>
+              <span
+                style={{
+                  fontSize: '10px',
+                  fontWeight: 700,
+                  textTransform: 'uppercase',
+                  padding: '2px 6px',
+                  borderRadius: '4px',
+                  background: 'rgba(56, 189, 248, 0.12)',
+                  color: '#38BDF8',
+                  border: '1px solid rgba(56, 189, 248, 0.3)',
+                }}
+              >
+                v0.1 · Fase 1
+              </span>
+            </div>
+            <p style={{ fontSize: '11px', color: 'var(--color-text-muted)', letterSpacing: '0.02em' }}>
+              Laboratório de Vida Artificial & Ecossistemas Emergentes
+            </p>
+          </div>
+        </div>
+
+        {/* Status Pill */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '4px 10px',
+            borderRadius: '999px',
+            fontSize: '11px',
+            fontWeight: 600,
+            background: isExtinct
+              ? 'rgba(239, 68, 68, 0.15)'
+              : status === 'RUNNING'
+              ? 'rgba(16, 185, 129, 0.15)'
+              : 'rgba(245, 158, 11, 0.15)',
+            color: isExtinct ? '#EF4444' : status === 'RUNNING' ? '#10B981' : '#F59E0B',
+            border: `1px solid ${
+              isExtinct ? 'rgba(239, 68, 68, 0.3)' : status === 'RUNNING' ? 'rgba(16, 185, 129, 0.3)' : 'rgba(245, 158, 11, 0.3)'
+            }`,
+          }}
+        >
+          <span
+            style={{
+              width: '6px',
+              height: '6px',
+              borderRadius: '50%',
+              backgroundColor: isExtinct ? '#EF4444' : status === 'RUNNING' ? '#10B981' : '#F59E0B',
+              boxShadow: `0 0 6px ${isExtinct ? '#EF4444' : status === 'RUNNING' ? '#10B981' : '#F59E0B'}`,
+            }}
+          />
+          {isExtinct ? 'POPULAÇÃO EXTINTA' : status === 'RUNNING' ? 'SIMULANDO' : 'PAUSADO'}
+        </div>
+      </div>
+
+      {/* Control Buttons */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        {/* Play/Pause */}
+        {status === 'RUNNING' ? (
+          <button
+            onClick={onPause}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '8px 16px',
+              borderRadius: '8px',
+              background: '#EAB308',
+              color: '#0F172A',
+              fontWeight: 700,
+              fontSize: '13px',
+              border: 'none',
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+            }}
+            title="Pausar simulação (Espaço)"
+          >
+            <Pause size={15} /> Pausar
+          </button>
+        ) : (
+          <button
+            onClick={onPlay}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '8px 16px',
+              borderRadius: '8px',
+              background: '#10B981',
+              color: '#0F172A',
+              fontWeight: 700,
+              fontSize: '13px',
+              border: 'none',
+              cursor: 'pointer',
+              boxShadow: '0 0 14px rgba(16, 185, 129, 0.4)',
+              transition: 'all 0.15s ease',
+            }}
+            title="Iniciar simulação (Espaço)"
+          >
+            <Play size={15} /> Iniciar
+          </button>
+        )}
+
+        {/* Step */}
+        <button
+          onClick={onStep}
+          disabled={status === 'RUNNING'}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '8px 14px',
+            borderRadius: '8px',
+            background: 'var(--bg-surface-elevated)',
+            color: status === 'RUNNING' ? 'rgba(255, 255, 255, 0.3)' : '#F1F5F9',
+            fontWeight: 600,
+            fontSize: '13px',
+            border: '1px solid var(--border-subtle)',
+            cursor: status === 'RUNNING' ? 'not-allowed' : 'pointer',
+          }}
+          title="Avançar 1 ciclo (Step)"
+        >
+          <SkipForward size={14} /> Passo
+        </button>
+
+        {/* Reset */}
+        <button
+          onClick={onReset}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '8px 14px',
+            borderRadius: '8px',
+            background: 'var(--bg-surface-elevated)',
+            color: '#F1F5F9',
+            fontWeight: 600,
+            fontSize: '13px',
+            border: '1px solid var(--border-subtle)',
+            cursor: 'pointer',
+          }}
+          title="Reiniciar com semente atual"
+        >
+          <RotateCcw size={14} /> Reiniciar
+        </button>
+
+        {/* Speed Slider */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '4px 12px',
+            borderRadius: '8px',
+            background: 'var(--bg-surface)',
+            border: '1px solid var(--border-subtle)',
+          }}
+        >
+          <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>TPS:</span>
+          <input
+            type="range"
+            min="5"
+            max="60"
+            step="5"
+            value={tps}
+            onChange={(e) => onSpeedChange(Number(e.target.value))}
+            style={{ width: '80px', accentColor: 'var(--color-primary)', cursor: 'pointer' }}
+          />
+          <span style={{ fontSize: '12px', fontWeight: 700, minWidth: '32px', textAlign: 'right', color: '#38BDF8' }}>
+            {tps}
+          </span>
+        </div>
+
+        {/* Config Modal Button */}
+        <button
+          onClick={onOpenConfig}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '8px 12px',
+            borderRadius: '8px',
+            background: 'var(--bg-surface-elevated)',
+            color: '#38BDF8',
+            fontWeight: 600,
+            fontSize: '13px',
+            border: '1px solid rgba(56, 189, 248, 0.25)',
+            cursor: 'pointer',
+          }}
+          title="Configurar Parâmetros do Experimento"
+        >
+          <SlidersHorizontal size={15} /> Parâmetros
+        </button>
+      </div>
+
+      {/* Connection & Telemetry info */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+        <div style={{ textAlign: 'right' }}>
+          <div style={{ fontSize: '10px', color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+            Ciclo Atual
+          </div>
+          <div style={{ fontSize: '15px', fontWeight: 700, fontFamily: 'JetBrains Mono, monospace', color: '#F1F5F9' }}>
+            t = {tick.toLocaleString()}
+          </div>
+        </div>
+
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            fontSize: '11px',
+            color: connected ? '#10B981' : '#EF4444',
+          }}
+          title={connected ? 'Conectado ao servidor' : 'Tentando reconectar...'}
+        >
+          {connected ? <Wifi size={16} /> : <WifiOff size={16} />}
+        </div>
+      </div>
+    </header>
+  );
+};
