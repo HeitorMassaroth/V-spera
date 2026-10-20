@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Play, Pause, SkipForward, RotateCcw, SlidersHorizontal, Activity, Wifi, WifiOff, Volume2, VolumeX } from 'lucide-react';
+import { Play, Pause, SkipForward, RotateCcw, SlidersHorizontal, Activity, Wifi, WifiOff, Volume2, VolumeX, Database, GitBranch } from 'lucide-react';
 import type { SeasonInfo } from '../types';
 import { soundManager } from '../audio/SoundManager';
 
@@ -18,6 +18,8 @@ interface TopBarProps {
   onReset: () => void;
   onSpeedChange: (tps: number) => void;
   onOpenConfig: () => void;
+  onOpenExperiments?: () => void;
+  onOpenPhylogeny?: () => void;
 }
 
 export const TopBar: React.FC<TopBarProps> = ({
@@ -35,6 +37,8 @@ export const TopBar: React.FC<TopBarProps> = ({
   onReset,
   onSpeedChange,
   onOpenConfig,
+  onOpenExperiments,
+  onOpenPhylogeny,
 }) => {
   const [muted, setMuted] = useState<boolean>(soundManager.isMuted());
 
@@ -348,6 +352,52 @@ export const TopBar: React.FC<TopBarProps> = ({
         >
           <SlidersHorizontal size={15} /> Parâmetros
         </button>
+
+        {/* Filogenia Button */}
+        {onOpenPhylogeny && (
+          <button
+            onClick={onOpenPhylogeny}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '8px 12px',
+              borderRadius: '8px',
+              background: 'rgba(168, 85, 247, 0.12)',
+              color: '#C084FC',
+              fontWeight: 600,
+              fontSize: '13px',
+              border: '1px solid rgba(168, 85, 247, 0.3)',
+              cursor: 'pointer',
+            }}
+            title="Navegador de Árvore Filogenética & Linhagens Ancestrais"
+          >
+            <GitBranch size={15} /> Filogenia
+          </button>
+        )}
+
+        {/* SQLite Database / Experiments Button */}
+        {onOpenExperiments && (
+          <button
+            onClick={onOpenExperiments}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '8px 12px',
+              borderRadius: '8px',
+              background: 'rgba(56, 189, 248, 0.12)',
+              color: '#38BDF8',
+              fontWeight: 600,
+              fontSize: '13px',
+              border: '1px solid rgba(56, 189, 248, 0.3)',
+              cursor: 'pointer',
+            }}
+            title="Gerenciador de Ensaios & Banco de Dados SQLite"
+          >
+            <Database size={15} /> SQLite
+          </button>
+        )}
 
         {/* Audio Procedural Toggle Button */}
         <button

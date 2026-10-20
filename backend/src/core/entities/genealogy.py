@@ -534,3 +534,81 @@ class GenealogyRegistry:
 
         return pruned
 
+    def get_phylogeny_tree(self, living_ids: Optional[set[int]] = None) -> Dict[str, Any]:
+        """
+        Gera uma representação em grafo e árvore hierárquica filogenética completa
+        para visualização interativa de linhagens no frontend.
+        """
+        active_set = living_ids if living_ids is not None else set()
+        nodes: List[Dict[str, Any]] = []
+        links: List[Dict[str, Any]] = []
+        lineages_summary: Dict[str, Dict[str, Any]] = {}
+        max_gen = 0
+
+        for oid, rec in self._records.items():
+            if rec.generation > max_gen:
+                max_gen = rec.generation
+
+            genome = rec.genome or {}
+            is_alive = oid in active_set
+
+            nodes.append({
+                "id": rec.id,
+                "name": rec.name,
+                "generation": rec.generation,
+                "species": rec.species,
+                "sex": rec.sex,
+                "alive": is_alive,
+                "birth_tick": rec.birth_tick,
+                "death_tick": rec.death_tick,
+                "father_id": rec.father_id,
+                "mother_id": rec.mother_id,
+                "inbreeding_coefficient": round(rec.inbreeding_coefficient, 3),
+                "lineage_id": rec.lineage_id,
+                "lineage_name": rec.lineage_name,
+                "forca": round(genome.get("forca", 20.0), 1),
+                "velocidade": round(genome.get("velocidade", 1.5), 1),
+                "resistencia": round(genome.get("resistencia", 20.0), 1),
+                "coleta": round(genome.get("coleta", 20.0), 1),
+                "children_count": len(rec.children_ids),
+            })
+
+            # Conexões pai -> filho e mãe -> filho
+            if rec.father_id is not None and rec.father_id in self._records:
+                links.append({
+                    "source": rec.father_id,
+                    "target": rec.id,
+                    "relationship": "father",
+                })
+            if rec.mother_id is not None and rec.mother_id in self._records:
+                links.append({
+                    "source": rec.mother_id,
+                    "target": rec.id,
+                    "relationship": "mother",
+                })
+
+            # Estatísticas da linhagem
+            lin_name = rec.lineage_name or "Ancestral"
+            if lin_name not in lineages_summary:
+                lineages_summary[lin_name] = {
+                    "name": lin_name,
+                    "total_descendants": 0,
+                    "alive_count": 0,
+                    "founders": [],
+                }
+            lineages_summary[lin_name]["total_descendants"] += 1
+            if is_alive:
+                lineages_summary[lin_name]["alive_count"] += 1
+            if rec.generation == 0 and rec.id not in lineages_summary[lin_name]["founders"]:
+                lineages_summary[lin_name]["founders"].append(rec.id)
+
+        return {
+            "total_nodes": len(nodes),
+            "total_links": len(links),
+            "max_generation": max_gen,
+            "nodes": nodes,
+            "links": links,
+            "lineages": list(lineages_summary.values()),
+        }
+
+

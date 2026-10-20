@@ -4,6 +4,8 @@ import { TopBar } from './components/TopBar';
 import { SimulationViewer } from './components/SimulationViewer';
 import { MetricsPanel } from './components/MetricsPanel';
 import { ConfigModal } from './components/ConfigModal';
+import { ExperimentsModal } from './components/ExperimentsModal';
+import { PhylogenyModal } from './components/PhylogenyModal';
 import type { SimulationConfig } from './types';
 
 export const App: React.FC = () => {
@@ -47,6 +49,8 @@ export const App: React.FC = () => {
   });
 
   const [isConfigOpen, setIsConfigOpen] = useState<boolean>(false);
+  const [isExperimentsOpen, setIsExperimentsOpen] = useState<boolean>(false);
+  const [isPhylogenyOpen, setIsPhylogenyOpen] = useState<boolean>(false);
 
   const handlePlayPauseToggle = useCallback(() => {
     if (status === 'RUNNING') {
@@ -102,6 +106,8 @@ export const App: React.FC = () => {
         onReset={() => reset(config.seed ?? undefined)}
         onSpeedChange={setSpeed}
         onOpenConfig={() => setIsConfigOpen(true)}
+        onOpenExperiments={() => setIsExperimentsOpen(true)}
+        onOpenPhylogeny={() => setIsPhylogenyOpen(true)}
       />
 
       {/* Área Central: Visualizador Canvas 2D + Painel de Telemetria Lateral */}
@@ -153,6 +159,19 @@ export const App: React.FC = () => {
         onClose={() => setIsConfigOpen(false)}
         config={config}
         onApplyConfig={handleApplyConfig}
+      />
+
+      {/* Modal de Experimentos e Banco SQLite */}
+      <ExperimentsModal
+        isOpen={isExperimentsOpen}
+        onClose={() => setIsExperimentsOpen(false)}
+      />
+
+      {/* Modal de Árvore Filogenética */}
+      <PhylogenyModal
+        isOpen={isPhylogenyOpen}
+        onClose={() => setIsPhylogenyOpen(false)}
+        onSelectOrganism={setSelectedOrganismId}
       />
     </div>
   );

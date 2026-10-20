@@ -8,6 +8,7 @@ import {
   Crosshair,
   MousePointer,
   Apple,
+  Film,
 } from 'lucide-react';
 import type { CompactOrganism, CompactFood, AttributeStats, WorldEvent, NestInfo, ClanInfo, TerritoryZoneInfo, SeasonInfo } from '../types';
 import { WorldRenderer, type RenderOptions } from '../canvas/WorldRenderer';
@@ -68,6 +69,8 @@ export const SimulationViewer: React.FC<SimulationViewerProps> = ({
   // Modos de Ferramenta Interativa
   const [activeTool, setActiveTool] = useState<'inspect' | 'feed'>('inspect');
   const [followSelected, setFollowSelected] = useState<boolean>(false);
+  const [cinematicMode, setCinematicMode] = useState<boolean>(false);
+  const [cinematicLabel, setCinematicLabel] = useState<string>('');
 
   // Estados de visualização
   const [showSensoryRadius, setShowSensoryRadius] = useState<boolean>(false);
@@ -122,6 +125,12 @@ export const SimulationViewer: React.FC<SimulationViewerProps> = ({
     followSelectedRef.current = followSelected;
   }, [followSelected]);
 
+  const cinematicModeRef = useRef<boolean>(cinematicMode);
+  useEffect(() => {
+    cinematicModeRef.current = cinematicMode;
+  }, [cinematicMode]);
+  const cinematicTargetRef = useRef<{ id: number; untilTick: number; reason: string } | null>(null);
+
   // Inicialização e Resize
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -158,8 +167,72 @@ export const SimulationViewer: React.FC<SimulationViewerProps> = ({
       if (rendererRef.current && canvas) {
         const { width: viewW, height: viewH } = dimensionsRef.current;
 
-        // Modo Seguir Habitante Selecionado
-        if (followSelectedRef.current && selectedIdRef.current !== null) {
+        // Modo Câmera de Cinema / Documentário Automático
+        if (cinematicModeRef.current) {
+          const currentTick = stateRef.current.tick;
+          const liveOrgs = stateRef.current.organisms;
+
+          let targetOrg = liveOrgs.find((o) => o.id === cinematicTargetRef.current?.id);
+
+          if (!targetOrg || currentTick >= (cinematicTargetRef.current?.untilTick ?? 0)) {
+            // 1. Prioridade: Evento dramático recente (combate, predação, reprodução)
+            const recentEvent = stateRef.current.events?.slice(-10).reverse().find((e) => {
+              const eOrgId = (e as any).organism_id || (e as any).predator_id || (e as any).subject_id;
+              return eOrgId && liveOrgs.some((o) => o.id === eOrgId);
+            });
+
+            if (recentEvent) {
+              const eventOrgId = (recentEvent as any).organism_id || (recentEvent as any).predator_id || (recentEvent as any).subject_id;
+              targetOrg = liveOrgs.find((o) => o.id === eventOrgId);
+              if (targetOrg) {
+                cinematicTargetRef.current = {
+                  id: targetOrg.id,
+                  untilTick: currentTick + 150,
+                  reason: `⚡ Ação: Animal #${targetOrg.id} (${recentEvent.type})`,
+                };
+              }
+            }
+
+            // 2. Prioridade: Líder Alpha de Clã ativo
+            if (!targetOrg && stateRef.current.clans && stateRef.current.clans.length > 0) {
+              const alphaClan = stateRef.current.clans.find((c) => c.alpha_id && liveOrgs.some((o) => o.id === c.alpha_id));
+              if (alphaClan && alphaClan.alpha_id) {
+                targetOrg = liveOrgs.find((o) => o.id === alphaClan.alpha_id);
+                if (targetOrg) {
+                  cinematicTargetRef.current = {
+                    id: targetOrg.id,
+                    untilTick: currentTick + 200,
+                    reason: `👑 Líder Alpha #${targetOrg.id} (Clã ${alphaClan.name})`,
+                  };
+                }
+              }
+            }
+
+            // 3. Prioridade: Espécime de maior destaque / energia
+            if (!targetOrg && liveOrgs.length > 0) {
+              const sorted = [...liveOrgs].sort((a, b) => b.e - a.e);
+              targetOrg = sorted[0];
+              if (targetOrg) {
+                cinematicTargetRef.current = {
+                  id: targetOrg.id,
+                  untilTick: currentTick + 180,
+                  reason: `🌟 Espécime #${targetOrg.id} (Gen ${targetOrg.gen || 0})`,
+                };
+              }
+            }
+
+            if (cinematicTargetRef.current) {
+              setCinematicLabel(cinematicTargetRef.current.reason);
+            }
+          }
+
+          if (targetOrg) {
+            const targetOffsetX = viewW / 2 - targetOrg.x * rendererRef.current.scale;
+            const targetOffsetY = viewH / 2 - targetOrg.y * rendererRef.current.scale;
+            rendererRef.current.offsetX += (targetOffsetX - rendererRef.current.offsetX) * 0.08;
+            rendererRef.current.offsetY += (targetOffsetY - rendererRef.current.offsetY) * 0.08;
+          }
+        } else if (followSelectedRef.current && selectedIdRef.current !== null) {
           const target = stateRef.current.organisms.find((o) => o.id === selectedIdRef.current);
           if (target) {
             const targetOffsetX = viewW / 2 - target.x * rendererRef.current.scale;
@@ -224,6 +297,9 @@ export const SimulationViewer: React.FC<SimulationViewerProps> = ({
       } else if (e.key === 'Escape') {
         onSelectOrganism(null);
         setFollowSelected(false);
+        setCinematicMode(false);
+      } else if (e.key.toLowerCase() === 'c') {
+        setCinematicMode((prev) => !prev);
       } else if (e.key.toLowerCase() === 'f') {
         setActiveTool((prev) => (prev === 'inspect' ? 'feed' : 'inspect'));
       }
@@ -249,9 +325,10 @@ export const SimulationViewer: React.FC<SimulationViewerProps> = ({
     rendererRef.current.offsetX += dx;
     rendererRef.current.offsetY += dy;
 
-    // Se o usuário arrastou a tela, desativa followSelected temporariamente para dar controle manual
+    // Se o usuário arrastou a tela, desativa followSelected e cinematicMode temporariamente para dar controle manual
     if (Math.hypot(dx, dy) > 2) {
       setFollowSelected(false);
+      setCinematicMode(false);
     }
   }, []);
 
@@ -541,6 +618,49 @@ export const SimulationViewer: React.FC<SimulationViewerProps> = ({
         />
       )}
 
+      {/* Cinematic HUD Pill Top-Center */}
+      {cinematicMode && (
+        <div
+          className="glass-panel"
+          style={{
+            position: 'absolute',
+            top: '16px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '6px 16px',
+            borderRadius: '999px',
+            background: 'rgba(15, 23, 42, 0.88)',
+            border: '1px solid rgba(239, 68, 68, 0.5)',
+            boxShadow: '0 0 24px rgba(239, 68, 68, 0.25)',
+            zIndex: 20,
+            pointerEvents: 'none',
+            backdropFilter: 'blur(8px)',
+          }}
+        >
+          <span
+            style={{
+              width: '8px',
+              height: '8px',
+              borderRadius: '50%',
+              background: '#EF4444',
+              display: 'inline-block',
+              boxShadow: '0 0 8px #EF4444',
+            }}
+          />
+          <span style={{ fontSize: '11px', fontWeight: 800, letterSpacing: '0.08em', color: '#FCA5A5', textTransform: 'uppercase' }}>
+            VÉSPERA DOC &bull; CÂMERA CINEMA
+          </span>
+          {cinematicLabel && (
+            <span style={{ fontSize: '11px', color: '#F1F5F9', borderLeft: '1px solid rgba(255,255,255,0.2)', paddingLeft: '8px' }}>
+              {cinematicLabel}
+            </span>
+          )}
+        </div>
+      )}
+
       {/* Floating Center View & Speed Buttons Bottom-Right */}
       <div
         style={{
@@ -552,6 +672,32 @@ export const SimulationViewer: React.FC<SimulationViewerProps> = ({
           zIndex: 10,
         }}
       >
+        <button
+          onClick={() => {
+            setCinematicMode(!cinematicMode);
+            if (!cinematicMode) {
+              setFollowSelected(false);
+            }
+          }}
+          className="glass-panel"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '5px',
+            padding: '8px 12px',
+            borderRadius: '8px',
+            fontSize: '11px',
+            fontWeight: 700,
+            background: cinematicMode ? 'rgba(239, 68, 68, 0.25)' : 'rgba(15, 23, 42, 0.8)',
+            color: cinematicMode ? '#F87171' : '#94A3B8',
+            border: `1px solid ${cinematicMode ? '#EF4444' : 'rgba(255, 255, 255, 0.1)'}`,
+            cursor: 'pointer',
+          }}
+          title="Ativar câmera automática de documentário natural (Atalho [C])"
+        >
+          <Film size={13} /> {cinematicMode ? 'Cinema Ativo' : 'Câmera Cinema'}
+        </button>
+
         {selectedOrganismId !== null && (
           <button
             onClick={() => setFollowSelected(!followSelected)}
@@ -648,8 +794,8 @@ export const SimulationViewer: React.FC<SimulationViewerProps> = ({
           </span>
         ) : (
           <span>
-            💡 <b>Clique em qualquer habitante</b> para inspecionar &bull; Atalho <span style={{ color: '#E2E8F0' }}>[F]</span> Semear Alimento &bull;{' '}
-            <span style={{ color: '#E2E8F0' }}>[Espaço]</span> Iniciar/Pausar
+            💡 <b>Clique em qualquer habitante</b> para inspecionar &bull; Atalho <span style={{ color: '#E2E8F0' }}>[C]</span> Câmera Cinema &bull;{' '}
+            <span style={{ color: '#E2E8F0' }}>[F]</span> Semear Alimento &bull; <span style={{ color: '#E2E8F0' }}>[Espaço]</span> Iniciar/Pausar
           </span>
         )}
       </div>

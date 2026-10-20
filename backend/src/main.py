@@ -8,6 +8,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from api.websocket_manager import WebSocketManager
 from engine.runner import SimulationRunner
 from api.routers.simulation import create_simulation_router
+from api.routers.experiments import create_experiment_router
+from api.routers.analytics import create_analytics_router
 
 from infrastructure.database import init_db
 
@@ -50,6 +52,8 @@ app.add_middleware(
 
 # Registro das rotas
 app.include_router(create_simulation_router(runner, ws_manager))
+app.include_router(create_experiment_router(runner))
+app.include_router(create_analytics_router(runner))
 
 
 @app.get("/api/health")
