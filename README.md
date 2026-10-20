@@ -71,6 +71,7 @@ V-spera/
 │   ├── SIMULATION_RULES.md             # Equações matemáticas e regras
 │   ├── DATA_MODEL.md                   # Persistência e dados
 │   └── ROADMAP.md                      # Fases 1 a 5 de desenvolvimento
+├── BUGS_E_MELHORIAS.md                 # Rastreamento de bugs, riscos e melhorias futuras
 └── README.md
 ```
 
