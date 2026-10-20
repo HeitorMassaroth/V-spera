@@ -16,7 +16,8 @@ export const ConfigModal: React.FC<ConfigModalProps> = ({
   onApplyConfig,
 }) => {
   const [seed, setSeed] = useState<number | null>(config.seed);
-  const [initialOrganisms, setInitialOrganisms] = useState<number>(config.initial_organisms);
+  const [randomGenesis, setRandomGenesis] = useState<boolean>(config.initial_organisms === null || config.initial_organisms === undefined);
+  const [initialOrganisms, setInitialOrganisms] = useState<number>(config.initial_organisms ?? 40);
   const [initialFood, setInitialFood] = useState<number>(config.initial_food);
   const [foodSpawnRate, setFoodSpawnRate] = useState<number>(config.food_spawn_rate);
   const [maxFood, setMaxFood] = useState<number>(config.max_food);
@@ -33,7 +34,7 @@ export const ConfigModal: React.FC<ConfigModalProps> = ({
     e.preventDefault();
     onApplyConfig({
       seed,
-      initial_organisms: initialOrganisms,
+      initial_organisms: randomGenesis ? null : initialOrganisms,
       initial_food: initialFood,
       food_spawn_rate: foodSpawnRate,
       max_food: maxFood,
@@ -132,18 +133,40 @@ export const ConfigModal: React.FC<ConfigModalProps> = ({
           {/* Grid de 2 colunas para população e comida */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
             <div>
-              <label style={{ fontSize: '12px', fontWeight: 600, color: '#94A3B8', display: 'block', marginBottom: '6px' }}>
-                População Inicial: {initialOrganisms}
-              </label>
-              <input
-                type="range"
-                min="5"
-                max="200"
-                step="5"
-                value={initialOrganisms}
-                onChange={(e) => setInitialOrganisms(Number(e.target.value))}
-                style={{ width: '100%', accentColor: 'var(--color-primary)' }}
-              />
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                <label style={{ fontSize: '12px', fontWeight: 600, color: '#94A3B8' }}>
+                  População Inicial
+                </label>
+                <label style={{ fontSize: '11px', color: '#38BDF8', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={randomGenesis}
+                    onChange={(e) => setRandomGenesis(e.target.checked)}
+                    style={{ accentColor: '#38BDF8', cursor: 'pointer' }}
+                  />
+                  0-10 aleat.
+                </label>
+              </div>
+              {randomGenesis ? (
+                <div style={{ padding: '8px 10px', borderRadius: '8px', background: 'rgba(56, 189, 248, 0.08)', border: '1px solid rgba(56, 189, 248, 0.2)', fontSize: '11px', color: '#BAE6FD', lineHeight: '1.4' }}>
+                  🎲 <strong>Gênese Natural:</strong> 0 a 10 de cada tipo (Macho/Fêmea) por espécie. Começam sem ninho nem clã.
+                </div>
+              ) : (
+                <>
+                  <div style={{ fontSize: '11px', color: '#CBD5E1', marginBottom: '4px' }}>
+                    Fixo: {initialOrganisms} pioneiros
+                  </div>
+                  <input
+                    type="range"
+                    min="4"
+                    max="200"
+                    step="2"
+                    value={initialOrganisms}
+                    onChange={(e) => setInitialOrganisms(Number(e.target.value))}
+                    style={{ width: '100%', accentColor: 'var(--color-primary)' }}
+                  />
+                </>
+              )}
             </div>
 
             <div>

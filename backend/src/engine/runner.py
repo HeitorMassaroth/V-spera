@@ -58,6 +58,10 @@ class SimulationRunner:
         width: Optional[float] = None,
         height: Optional[float] = None,
         initial_organisms: Optional[int] = None,
+        initial_predator_females: Optional[int] = None,
+        initial_predator_males: Optional[int] = None,
+        initial_vranco_females: Optional[int] = None,
+        initial_vranco_males: Optional[int] = None,
         initial_food: Optional[int] = None,
         food_spawn_rate: Optional[float] = None,
         max_food: Optional[int] = None,
@@ -67,7 +71,7 @@ class SimulationRunner:
             target_seed = seed if seed is not None else self.world.seed
             w = width if width is not None else self.world.width
             h = height if height is not None else self.world.height
-            pop = initial_organisms if initial_organisms is not None else 50
+            pop = initial_organisms
             food = initial_food if initial_food is not None else 120
             rate = food_spawn_rate if food_spawn_rate is not None else self.world.food_spawn_rate
             max_f = max_food if max_food is not None else self.world.max_food
@@ -77,6 +81,10 @@ class SimulationRunner:
                 height=h,
                 seed=target_seed,
                 initial_organisms=pop,
+                initial_predator_females=initial_predator_females,
+                initial_predator_males=initial_predator_males,
+                initial_vranco_females=initial_vranco_females,
+                initial_vranco_males=initial_vranco_males,
                 initial_food=food,
                 food_spawn_rate=rate,
                 max_food=max_f,

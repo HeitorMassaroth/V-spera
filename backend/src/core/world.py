@@ -33,9 +33,13 @@ class World:
         width: float = 1200.0,
         height: float = 800.0,
         seed: Optional[int] = 42,
-        initial_organisms: int = 50,
+        initial_organisms: Optional[int] = None,
         initial_predators: Optional[int] = None,
         initial_vrancos: Optional[int] = None,
+        initial_predator_females: Optional[int] = None,
+        initial_predator_males: Optional[int] = None,
+        initial_vranco_females: Optional[int] = None,
+        initial_vranco_males: Optional[int] = None,
         initial_food: int = 120,
         food_spawn_rate: float = 1.8,
         max_food: int = 250,
@@ -84,22 +88,41 @@ class World:
         self.total_food_consumed = 0
         self.recent_events: List[Dict[str, Any]] = []
 
-        # Determinação equilibrada das populações iniciais das duas raças
-        if initial_predators is None and initial_vrancos is None:
-            pred_count = initial_organisms // 2
-            vran_count = initial_organisms - pred_count
-        elif initial_predators is not None and initial_vrancos is None:
-            pred_count = initial_predators
-            vran_count = max(0, initial_organisms - pred_count)
-        elif initial_predators is None and initial_vrancos is not None:
-            vran_count = initial_vrancos
-            pred_count = max(0, initial_organisms - vran_count)
+        # População inicial por tipo (Macho / Fêmea) e espécie (Predador / Vranco)
+        # Indivíduos começam sem nenhum ninho nem clã formado.
+        if any(c is not None for c in (initial_predator_females, initial_predator_males, initial_vranco_females, initial_vranco_males)):
+            p_females = initial_predator_females or 0
+            p_males = initial_predator_males or 0
+            v_females = initial_vranco_females or 0
+            v_males = initial_vranco_males or 0
+        elif initial_organisms is not None:
+            # Compatibilidade retroativa para testes com contagem fixa
+            if initial_predators is None and initial_vrancos is None:
+                p_total = initial_organisms // 2
+                v_total = initial_organisms - p_total
+            else:
+                p_total = initial_predators if initial_predators is not None else max(0, initial_organisms - (initial_vrancos or 0))
+                v_total = initial_vrancos if initial_vrancos is not None else max(0, initial_organisms - p_total)
+            p_females = p_total // 2 + (p_total % 2)
+            p_males = p_total // 2
+            v_females = v_total // 2 + (v_total % 2)
+            v_males = v_total // 2
+        elif initial_predators is not None or initial_vrancos is not None:
+            p_total = initial_predators or 0
+            v_total = initial_vrancos or 0
+            p_females = p_total // 2 + (p_total % 2)
+            p_males = p_total // 2
+            v_females = v_total // 2 + (v_total % 2)
+            v_males = v_total // 2
         else:
-            pred_count = initial_predators or 0
-            vran_count = initial_vrancos or 0
+            # Comportamento padrão do sistema: sorteio aleatório de 0 a 10 de cada tipo (Macho e Fêmea) por espécie
+            p_females = self.prng.randint(0, 10)
+            p_males = self.prng.randint(0, 10)
+            v_females = self.prng.randint(0, 10)
+            v_males = self.prng.randint(0, 10)
 
-        # Inicialização do ecossistema com ambas as raças coexistindo
-        self._populate_initial(pred_count, vran_count, initial_food)
+        # Inicialização do ecossistema pioneiro (sem ninhos nem clãs formados)
+        self._populate_initial(p_females, p_males, v_females, v_males, initial_food)
 
     def _next_family_id(self) -> int:
         fid = self._next_family_id_counter
@@ -125,10 +148,30 @@ class World:
             "max_saude": sum(o.genome.max_saude for o in self.organisms.values()) / n,
         }
 
-    def _populate_initial(self, predator_count: int, vranco_count: int, food_count: int) -> None:
-        """Popula o ambiente inicial com Predadores e Vrancos pioneiros."""
-        # 1. Povoamento dos Predadores pioneiros
-        for i in range(predator_count):
+    def _populate_initial(
+        self,
+        predator_females: int,
+        predator_males: int,
+        vranco_females: int,
+        vranco_males: int,
+        food_count: int,
+    ) -> None:
+        """
+        Popula o ambiente inicial com Predadores e Vrancos pioneiros.
+        Começam estritamente como indivíduos solitários (sem nenhum ninho nem clã formado).
+        """
+        # 1. Povoamento dos Predadores pioneiros (intercalando fêmeas e machos)
+        pred_roles: List[str] = []
+        pf, pm = predator_females, predator_males
+        while pf > 0 or pm > 0:
+            if pf > 0:
+                pred_roles.append(Organism.ROLE_FEMALE)
+                pf -= 1
+            if pm > 0:
+                pred_roles.append(Organism.ROLE_MALE)
+                pm -= 1
+
+        for i, role in enumerate(pred_roles):
             oid = self._next_entity_id()
             x = self.prng.uniform(80.0, self.width - 80.0)
             y = self.prng.uniform(80.0, self.height - 80.0)
@@ -137,7 +180,6 @@ class World:
             vx = math.cos(initial_angle) * initial_speed
             vy = math.sin(initial_angle) * initial_speed
 
-            role = Organism.ROLE_FEMALE if i % 2 == 0 else Organism.ROLE_MALE
             genome = GeneticsEngine.generate_random_genome(self.prng, is_vranco=False)
             personality = GeneticsEngine.generate_random_personality(self.prng, is_vranco=False, genome=genome)
             name = GeneticsEngine.generate_name(i, 0, oid, is_vranco=False)
@@ -176,6 +218,7 @@ class World:
                 personality=personality,
                 sex=pred.sex,
                 life_stage=pred.life_stage,
+                species=Organism.SPECIES_PREDATOR,
                 mutations=[],
                 genetic_history=[],
                 inbreeding_coefficient=0.0,
@@ -186,10 +229,10 @@ class World:
             self.chronicle.record_event(
                 event_type=ChronicleEventType.BIRTH.value,
                 title=f"Gênese Ancestral: {name}",
-                description=f"{name} surgiu como indivíduo pioneiro da espécie Predador (Linhagem {genome.lineage_name}).",
+                description=f"{name} surgiu como indivíduo pioneiro ({'Fêmea' if role == Organism.ROLE_FEMALE else 'Macho'}) da espécie Predador (Linhagem {genome.lineage_name}).",
                 tick=0,
                 cause="Gênese primordial do ecossistema",
-                result="População fundadora estabelecida",
+                result="População fundadora estabelecida sem ninhos nem clãs",
                 importance=2,
                 location=(x, y),
                 primary_organism_id=oid,
@@ -198,11 +241,21 @@ class World:
                 metadata={"role": role, "generation": 0, "lineage": genome.lineage_name},
             )
 
-        # 2. Povoamento dos Vrancos pioneiros (Tendência natural a ocupar regiões periféricas)
+        # 2. Povoamento dos Vrancos pioneiros (intercalando fêmeas e machos)
         cx, cy = self.width / 2.0, self.height / 2.0
         max_r = min(self.width, self.height) * 0.44
 
-        for j in range(vranco_count):
+        vran_roles: List[str] = []
+        vf, vm = vranco_females, vranco_males
+        while vf > 0 or vm > 0:
+            if vf > 0:
+                vran_roles.append(Organism.ROLE_FEMALE)
+                vf -= 1
+            if vm > 0:
+                vran_roles.append(Organism.ROLE_MALE)
+                vm -= 1
+
+        for j, role in enumerate(vran_roles):
             oid = self._next_entity_id()
             angle = self.prng.uniform(0.0, 2.0 * math.pi)
             r_dist = self.prng.uniform(max_r * 0.55, max_r)
@@ -214,7 +267,6 @@ class World:
             vx = math.cos(initial_angle) * initial_speed
             vy = math.sin(initial_angle) * initial_speed
 
-            role = Organism.ROLE_FEMALE if j % 2 == 0 else Organism.ROLE_MALE
             genome = GeneticsEngine.generate_random_genome(self.prng, is_vranco=True)
             personality = GeneticsEngine.generate_random_personality(self.prng, is_vranco=True, genome=genome)
             name = GeneticsEngine.generate_name(j, 0, oid, is_vranco=True)
@@ -264,10 +316,10 @@ class World:
             self.chronicle.record_event(
                 event_type=ChronicleEventType.BIRTH.value,
                 title=f"Gênese Ancestral: {name}",
-                description=f"{name} surgiu como indivíduo pioneiro da espécie Vranco (Linhagem {genome.lineage_name}).",
+                description=f"{name} surgiu como indivíduo pioneiro ({'Fêmea' if role == Organism.ROLE_FEMALE else 'Macho'}) da espécie Vranco (Linhagem {genome.lineage_name}).",
                 tick=0,
                 cause="Gênese primordial do ecossistema",
-                result="População fundadora estabelecida na periferia",
+                result="População fundadora estabelecida na periferia sem ninhos nem clãs",
                 importance=2,
                 location=(vx_pos, vy_pos),
                 primary_organism_id=oid,

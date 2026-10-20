@@ -393,7 +393,11 @@ export interface SimulationConfig {
   seed: number | null;
   width: number;
   height: number;
-  initial_organisms: number;
+  initial_organisms?: number | null;
+  initial_predator_females?: number | null;
+  initial_predator_males?: number | null;
+  initial_vranco_females?: number | null;
+  initial_vranco_males?: number | null;
   initial_food: number;
   food_spawn_rate: number;
   max_food: number;
