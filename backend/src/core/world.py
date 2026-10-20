@@ -160,6 +160,12 @@ class World:
         Popula o ambiente inicial com Predadores e Vrancos pioneiros.
         Começam estritamente como indivíduos solitários (sem nenhum ninho nem clã formado).
         """
+        # Caso uma espécie não seja gerada na gênese, marca como registrada para não disparar falsa extinção
+        if predator_females + predator_males == 0:
+            self._predators_extinct_recorded = True
+        if vranco_females + vranco_males == 0:
+            self._vrancos_extinct_recorded = True
+
         # 1. Povoamento dos Predadores pioneiros (intercalando fêmeas e machos)
         pred_roles: List[str] = []
         pf, pm = predator_females, predator_males

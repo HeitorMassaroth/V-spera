@@ -22,7 +22,22 @@ interface VisualSpark {
   color: string;
   life: number;
   maxLife: number;
-  type: 'combat' | 'care' | 'clan';
+  type: 'combat' | 'care' | 'clan' | 'birth' | 'bond';
+}
+
+interface TrailPoint {
+  x: number;
+  y: number;
+}
+
+interface WeatherParticle {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  size: number;
+  alpha: number;
+  swayOffset: number;
 }
 
 export class WorldRenderer {
@@ -32,6 +47,9 @@ export class WorldRenderer {
   public offsetY: number = 0.0;
   private sparks: VisualSpark[] = [];
   private lastProcessedTick: number = 0;
+  private trails: Map<number, TrailPoint[]> = new Map();
+  private weatherParticles: WeatherParticle[] = [];
+  private weatherInitialized: boolean = false;
 
   constructor(ctx: CanvasRenderingContext2D) {
     this.ctx = ctx;
@@ -111,10 +129,30 @@ export class WorldRenderer {
           this.sparks.push({
             x: ev.x,
             y: ev.y,
-            text: '💍 Vínculo',
+            text: '💕 Vínculo Eterno',
             color: '#FDA4AF',
-            life: 35,
-            maxLife: 35,
+            life: 40,
+            maxLife: 40,
+            type: 'bond',
+          });
+        } else if (ev.type === 'birth' && ev.x !== undefined && ev.y !== undefined) {
+          this.sparks.push({
+            x: ev.x,
+            y: ev.y,
+            text: `✨ ${ev.child_name || 'Novo Habitante'} (G${ev.gen ?? 1})`,
+            color: '#FDE047',
+            life: 50,
+            maxLife: 50,
+            type: 'birth',
+          });
+        } else if (ev.type === 'nest_created' && ev.x !== undefined && ev.y !== undefined) {
+          this.sparks.push({
+            x: ev.x,
+            y: ev.y,
+            text: `🪺 Novo Ninho Estabelecido`,
+            color: '#34D399',
+            life: 45,
+            maxLife: 45,
             type: 'care',
           });
         } else if (ev.type === 'predation_kill' && ev.x !== undefined && ev.y !== undefined) {
@@ -253,7 +291,7 @@ export class WorldRenderer {
     ctx.scale(this.scale, this.scale);
 
     // 1. Limites do ecossistema e grade espacial com iluminação ambiental da estação
-    this.renderWorldBoundsAndGrid(ctx, options.worldWidth, options.worldHeight, options.showGridLines, season);
+    this.renderWorldBoundsAndGrid(ctx, options.worldWidth, options.worldHeight, options.showGridLines, season, currentTick);
 
     // 1.5 Territórios Regionais e Indicadores de Qualidade Ecológica
     if (options.showTerritories !== false) {
@@ -414,7 +452,7 @@ export class WorldRenderer {
       ctx.beginPath();
       ctx.arc(nest.x, nest.y, 20, 0, Math.PI * 2);
       ctx.strokeStyle = nest.level === 3 ? '#F59E0B' : nest.level === 2 ? '#34D399' : 'rgba(251, 191, 36, 0.6)';
-      ctx.lineWidth = 1.8;
+      ctx.lineWidth = nest.level === 3 ? 2.4 : 1.8;
       ctx.setLineDash([5, 3]);
       ctx.stroke();
       ctx.setLineDash([]);
@@ -425,23 +463,41 @@ export class WorldRenderer {
       ctx.fillStyle = 'rgba(251, 191, 36, 0.4)';
       ctx.fill();
 
-      // Tag sobre o ninho com clã e estoque
+      // Pontos de comida armazenada no ninho
+      if (nest.food_storage > 0) {
+        const dots = Math.min(6, Math.max(1, Math.ceil(nest.food_storage / 15)));
+        for (let d = 0; d < dots; d++) {
+          const angle = (d / dots) * Math.PI * 2;
+          const fx = nest.x + Math.cos(angle) * 11;
+          const fy = nest.y + Math.sin(angle) * 11;
+          ctx.beginPath();
+          ctx.arc(fx, fy, 2.2, 0, Math.PI * 2);
+          ctx.fillStyle = '#34D399';
+          ctx.shadowColor = '#10B981';
+          ctx.shadowBlur = 4;
+          ctx.fill();
+        }
+        ctx.shadowBlur = 0;
+      }
+
+      // Tag sobre o ninho com clã, nível e estoque
       ctx.save();
       ctx.font = 'bold 9px system-ui, -apple-system, sans-serif';
       ctx.textAlign = 'center';
       const clanName = getClanName(nest.family_id);
-      const tagText = `🪹 ${clanName} • 🌿${nest.food_storage.toFixed(0)}`;
+      const lvlBadge = nest.level > 1 ? `[Nv.${nest.level}] ` : '';
+      const tagText = `🪹 ${lvlBadge}${clanName} • 🌿${nest.food_storage.toFixed(0)}`;
       const textWidth = ctx.measureText(tagText).width;
 
-      ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
       ctx.beginPath();
       ctx.roundRect(nest.x - textWidth / 2 - 5, nest.y - 34, textWidth + 10, 14, 4);
       ctx.fill();
-      ctx.strokeStyle = 'rgba(251, 191, 36, 0.4)';
+      ctx.strokeStyle = nest.level === 3 ? '#F59E0B' : 'rgba(251, 191, 36, 0.4)';
       ctx.lineWidth = 1;
       ctx.stroke();
 
-      ctx.fillStyle = '#FDE68A';
+      ctx.fillStyle = nest.level === 3 ? '#FEF08A' : '#FDE68A';
       ctx.fillText(tagText, nest.x, nest.y - 25);
       ctx.restore();
     }
@@ -645,12 +701,78 @@ export class WorldRenderer {
     ctx.restore();
   }
 
+  private initWeather(worldWidth: number, worldHeight: number) {
+    if (this.weatherInitialized && this.weatherParticles.length > 0) return;
+    this.weatherParticles = [];
+    const count = 45;
+    for (let i = 0; i < count; i++) {
+      this.weatherParticles.push({
+        x: Math.random() * worldWidth,
+        y: Math.random() * worldHeight,
+        vx: (Math.random() - 0.5) * 0.4,
+        vy: 0.2 + Math.random() * 0.5,
+        size: 1.2 + Math.random() * 1.8,
+        alpha: 0.2 + Math.random() * 0.4,
+        swayOffset: Math.random() * Math.PI * 2,
+      });
+    }
+    this.weatherInitialized = true;
+  }
+
+  private renderWeather(
+    ctx: CanvasRenderingContext2D,
+    w: number,
+    h: number,
+    season?: SeasonInfo | null,
+    currentTick: number = 0
+  ) {
+    if (!season) return;
+    this.initWeather(w, h);
+
+    const sType = season.season;
+    let particleColor = 'rgba(255, 255, 255,';
+    let speedMult = 1.0;
+
+    if (sType === 'SPRING') {
+      particleColor = 'rgba(167, 243, 208,';
+      speedMult = 0.6;
+    } else if (sType === 'SUMMER') {
+      particleColor = 'rgba(253, 230, 138,';
+      speedMult = 0.8;
+    } else if (sType === 'AUTUMN') {
+      particleColor = 'rgba(251, 146, 60,';
+      speedMult = 1.2;
+    } else if (sType === 'WINTER') {
+      particleColor = 'rgba(186, 230, 253,';
+      speedMult = 1.0;
+    }
+
+    ctx.save();
+    for (const p of this.weatherParticles) {
+      const sway = Math.sin(currentTick * 0.04 + p.swayOffset) * 0.5;
+      p.x += (p.vx + sway) * speedMult;
+      p.y += p.vy * speedMult;
+
+      if (p.x < 0) p.x = w;
+      if (p.x > w) p.x = 0;
+      if (p.y < 0) p.y = h;
+      if (p.y > h) p.y = 0;
+
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+      ctx.fillStyle = `${particleColor} ${p.alpha})`;
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
   private renderWorldBoundsAndGrid(
     ctx: CanvasRenderingContext2D,
     w: number,
     h: number,
     showGrid: boolean,
-    season?: SeasonInfo | null
+    season?: SeasonInfo | null,
+    currentTick: number = 0
   ) {
     ctx.fillStyle = '#0B111E';
     ctx.fillRect(0, 0, w, h);
@@ -701,6 +823,9 @@ export class WorldRenderer {
     ctx.strokeStyle = strokeColor;
     ctx.lineWidth = 2.0;
     ctx.strokeRect(0, 0, w, h);
+
+    // Renderiza partículas climáticas sazonais
+    this.renderWeather(ctx, w, h, season, currentTick);
   }
 
   private renderFoods(ctx: CanvasRenderingContext2D, foods: CompactFood[]) {
@@ -734,6 +859,84 @@ export class WorldRenderer {
     currentTick: number = 0
   ) {
     ctx.save();
+
+    // 0.1 Limpeza de rastros de organismos falecidos
+    const activeIds = new Set(organisms.map(o => o.id));
+    for (const id of this.trails.keys()) {
+      if (!activeIds.has(id)) {
+        this.trails.delete(id);
+      }
+    }
+
+    // 0.2 Atualização dos rastros de nado/movimento
+    for (const org of organisms) {
+      let t = this.trails.get(org.id);
+      if (!t) {
+        t = [];
+        this.trails.set(org.id, t);
+      }
+      t.push({ x: org.x, y: org.y });
+      if (t.length > 5) {
+        t.shift();
+      }
+    }
+
+    // 0.3 Desenho das caudas bioluminescentes (rastros de movimento)
+    for (const org of organisms) {
+      const t = this.trails.get(org.id);
+      if (t && t.length > 1) {
+        ctx.beginPath();
+        ctx.moveTo(t[0].x, t[0].y);
+        for (let i = 1; i < t.length; i++) {
+          ctx.lineTo(t[i].x, t[i].y);
+        }
+        const isVranco = org.sp === 'V';
+        const trailColor = isVranco
+          ? 'rgba(245, 158, 11,'
+          : org.r === 'F'
+          ? 'rgba(251, 113, 133,'
+          : 'rgba(52, 211, 153,';
+        ctx.strokeStyle = `${trailColor} 0.18)`;
+        ctx.lineWidth = Math.max(1, org.sz * 0.45);
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.stroke();
+      }
+    }
+
+    // 0.4 Vínculos românticos / tethers entre casais monogâmicos próximos
+    const familyMates = new Map<number, { m?: CompactOrganism; f?: CompactOrganism }>();
+    for (const org of organisms) {
+      if (org.fam !== undefined && org.fam !== null && org.r !== 'C') {
+        let entry = familyMates.get(org.fam);
+        if (!entry) {
+          entry = {};
+          familyMates.set(org.fam, entry);
+        }
+        if (org.r === 'M') entry.m = org;
+        else if (org.r === 'F') entry.f = org;
+      }
+    }
+
+    for (const [, pair] of familyMates) {
+      if (pair.m && pair.f) {
+        const dx = pair.m.x - pair.f.x;
+        const dy = pair.m.y - pair.f.y;
+        const d = Math.sqrt(dx * dx + dy * dy);
+        if (d < 140 && d > 12) {
+          const tetherAlpha = Math.max(0, (1 - d / 140) * 0.32);
+          ctx.beginPath();
+          ctx.moveTo(pair.m.x, pair.m.y);
+          ctx.lineTo(pair.f.x, pair.f.y);
+          ctx.strokeStyle = `rgba(251, 113, 133, ${tetherAlpha})`;
+          ctx.lineWidth = 1;
+          ctx.setLineDash([3, 4]);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+      }
+    }
+
     for (const org of organisms) {
       const heading = Math.atan2(org.vy, org.vx);
       const roleChar = org.r ?? 'M'; // 'F' (Rosa), 'M' (Verde), 'C' (Roxo)
@@ -962,6 +1165,27 @@ export class WorldRenderer {
         ctx.strokeStyle = `rgba(52, 211, 153, ${alpha * 0.7})`;
         ctx.lineWidth = 1.2;
         ctx.stroke();
+      } else if (spark.type === 'birth') {
+        // Efeito de nascimento (halo dourado radiante)
+        ctx.beginPath();
+        ctx.arc(spark.x, spark.y, 6 + progress * 24, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(253, 224, 71, ${alpha * 0.85})`;
+        ctx.lineWidth = 2.0;
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.arc(spark.x, spark.y, 3 + progress * 12, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(254, 240, 138, ${alpha * 0.35})`;
+        ctx.fill();
+      } else if (spark.type === 'bond') {
+        // Efeito de vínculo de acasalamento (aura rosa radiante)
+        ctx.beginPath();
+        ctx.arc(spark.x, spark.y, 8 + progress * 18, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(253, 164, 175, ${alpha * 0.85})`;
+        ctx.lineWidth = 1.8;
+        ctx.setLineDash([4, 3]);
+        ctx.stroke();
+        ctx.setLineDash([]);
       } else {
         // Efeito de celebração / proclamação de clã
         ctx.beginPath();

@@ -81,3 +81,25 @@ def test_explicit_sex_counts():
     assert len(world.organisms) == 14
     assert len(world.family_system.nests) == 0
     assert len(world.clan_system.clans) == 0
+
+
+def test_zero_species_does_not_trigger_false_extinction():
+    """Garante que quando uma espécie é inicializada com zero indivíduos, não dispara falso evento de extinção no tick 1."""
+    world = World(
+        seed=123,
+        initial_predator_females=2,
+        initial_predator_males=2,
+        initial_vranco_females=0,
+        initial_vranco_males=0,
+    )
+    # Roda 5 ticks
+    for _ in range(5):
+        world.step()
+
+    # Não deve existir evento de extinção de Vrancos na crônica
+    extinction_events = [
+        e for e in world.chronicle._events
+        if e.event_type == "SPECIES_EXTINCTION" and e.species == Organism.SPECIES_VRANCO
+    ]
+    assert len(extinction_events) == 0
+
