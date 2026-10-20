@@ -472,3 +472,65 @@ class GenealogyRegistry:
         for data in records_data:
             rec = AnimalRecord.from_dict(data)
             self._records[rec.id] = rec
+
+    def prune_ancient_records(
+        self,
+        active_organism_ids: Any,
+        max_records: int = 2500,
+    ) -> int:
+        """
+        Poda registros genealógicos antigos em sessões ultralongas para evitar crescimento ilimitado de memória (BUG-03).
+        Preserva rigorosamente:
+        1. Todos os organismos ativos vivos.
+        2. Toda a árvore de ancestrais diretos dos organismos ativos até 6 gerações (profundidade de parentesco).
+        3. Todos os pioneiros fundadores (Geração 0).
+        Retorna a quantidade de registros podados.
+        """
+        if len(self._records) <= max_records:
+            return 0
+
+        active_set = set(active_organism_ids) if active_organism_ids else set()
+        protected_ids: set[int] = set()
+
+        # 1. Preserva todos os vivos e pioneiros
+        for oid, rec in self._records.items():
+            if oid in active_set or rec.generation == 0:
+                protected_ids.add(oid)
+
+        # 2. Preserva ancestrais diretos dos organismos vivos até 6 graus de parentesco
+        frontier = set(active_set)
+        for _ in range(6):
+            next_frontier: set[int] = set()
+            for oid in frontier:
+                rec = self._records.get(oid)
+                if rec:
+                    if rec.father_id is not None:
+                        protected_ids.add(rec.father_id)
+                        next_frontier.add(rec.father_id)
+                    if rec.mother_id is not None:
+                        protected_ids.add(rec.mother_id)
+                        next_frontier.add(rec.mother_id)
+            frontier = next_frontier
+            if not frontier:
+                break
+
+        # 3. Identifica registros descartáveis (falecidos fora da árvore de proteção)
+        candidates = [
+            (rec.birth_tick, oid)
+            for oid, rec in self._records.items()
+            if oid not in protected_ids and rec.death_tick is not None
+        ]
+
+        if not candidates:
+            return 0
+
+        # Ordena pelos mais antigos primeiro
+        candidates.sort()
+        to_prune_count = min(len(candidates), len(self._records) - max_records)
+        pruned = 0
+        for _, oid in candidates[:to_prune_count]:
+            self._records.pop(oid, None)
+            pruned += 1
+
+        return pruned
+

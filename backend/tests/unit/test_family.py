@@ -189,3 +189,39 @@ def test_child_growth_and_maturation():
         assert child.traits.color_hue == 335.0
     else:
         assert child.traits.color_hue == 140.0
+
+
+def test_genealogy_prune_ancient_records():
+    """Garante que a poda genealógica preserve ancestrais vivos e pioneiros enquanto descarta registros antigos (BUG-03 mitigado)."""
+    from core.entities.genealogy import GenealogyRegistry
+    from core.entities.genetics import GeneticsEngine
+    from core.prng import PRNG
+
+    registry = GenealogyRegistry()
+    prng = PRNG(42)
+
+    # Cria pioneiro geração 0
+    g0 = GeneticsEngine.generate_random_genome(prng)
+    registry.register_birth(1, "Ancestral", "MALE", 0, 0, None, None, None, g0, [], [])
+    registry.register_death(1, 100, "Velhice")
+
+    # Cria 10 registros intermediários falecidos (geração 1)
+    for i in range(2, 12):
+        gi = GeneticsEngine.generate_random_genome(prng)
+        registry.register_birth(i, f"Morto_{i}", "FEMALE", 1, 50 + i, 1, None, None, gi, [], [])
+        registry.register_death(i, 120 + i, "Predação")
+
+    # Cria indivíduo vivo atual (geração 2) cujo pai é 2
+    g2 = GeneticsEngine.generate_random_genome(prng)
+    registry.register_birth(20, "Vivo", "MALE", 2, 200, 2, None, None, g2, [], [])
+
+    # Poda com limite de 5 registros
+    active_ids = {20}
+    pruned = registry.prune_ancient_records(active_ids, max_records=5)
+
+    assert pruned > 0
+    # O vivo (20), o pioneiro G0 (1) e o pai direto (2) DEVEM ser preservados
+    assert registry.get_record(20) is not None
+    assert registry.get_record(1) is not None
+    assert registry.get_record(2) is not None
+

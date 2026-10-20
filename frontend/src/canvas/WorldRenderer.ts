@@ -45,6 +45,7 @@ export class WorldRenderer {
   public scale: number = 1.0;
   public offsetX: number = 0.0;
   public offsetY: number = 0.0;
+  public dpr: number = 1.0;
   private sparks: VisualSpark[] = [];
   private lastProcessedTick: number = 0;
   private trails: Map<number, TrailPoint[]> = new Map();
@@ -279,6 +280,11 @@ export class WorldRenderer {
   ) {
     const ctx = this.ctx;
     ctx.save();
+
+    // Aplica escala de alta resolução física (Retina / 4K / High-DPI - BUG-04)
+    if (this.dpr && this.dpr !== 1.0) {
+      ctx.scale(this.dpr, this.dpr);
+    }
 
     this.ingestEvents(events, currentTick);
 

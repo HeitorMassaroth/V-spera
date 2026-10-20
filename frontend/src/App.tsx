@@ -9,6 +9,8 @@ import type { SimulationConfig } from './types';
 export const App: React.FC = () => {
   const {
     connected,
+    isReconnecting,
+    reconnect,
     status,
     tps,
     organisms,
@@ -92,6 +94,8 @@ export const App: React.FC = () => {
         tick={metrics?.tick ?? 0}
         isExtinct={metrics?.is_extinct ?? false}
         season={season ?? metrics?.season}
+        isReconnecting={isReconnecting}
+        onReconnect={reconnect}
         onPlay={play}
         onPause={pause}
         onStep={step}

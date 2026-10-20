@@ -121,8 +121,26 @@ class World:
             v_females = self.prng.randint(0, 10)
             v_males = self.prng.randint(0, 10)
 
+            # Mitigação BUG-01: Garante viabilidade reprodutiva caso uma espécie apareça na gênese
+            # Se uma espécie tiver fêmeas mas 0 machos, sorteia pelo menos 1 macho para viabilidade biológica (e vice-versa)
+            if p_females > 0 and p_males == 0:
+                p_males = self.prng.randint(1, min(10, max(1, p_females)))
+            elif p_males > 0 and p_females == 0:
+                p_females = self.prng.randint(1, min(10, max(1, p_males)))
+
+            if v_females > 0 and v_males == 0:
+                v_males = self.prng.randint(1, min(10, max(1, v_females)))
+            elif v_males > 0 and v_females == 0:
+                v_females = self.prng.randint(1, min(10, max(1, v_males)))
+
         # Inicialização do ecossistema pioneiro (sem ninhos nem clãs formados)
-        self._populate_initial(p_females, p_males, v_females, v_males, initial_food)
+        # Mitigação BUG-02: Se food_count for o default (120) e a população pioneira for reduzida, escala o alimento inicial proporcionalmente
+        effective_food = initial_food
+        total_pioneers = p_females + p_males + v_females + v_males
+        if initial_organisms is None and initial_food == 120:
+            effective_food = min(initial_food, max(16, total_pioneers * 4))
+
+        self._populate_initial(p_females, p_males, v_females, v_males, effective_food)
 
     def _next_family_id(self) -> int:
         fid = self._next_family_id_counter
@@ -474,8 +492,13 @@ class World:
                 tick_events=tick_events,
             )
 
-        # 6. Renovação estocástica de alimentos (Spawn acumulativo com modulação sazonal)
-        self._food_accumulator += self.food_spawn_rate * self.environment_system.state.food_spawn_multiplier
+        # 6. Renovação estocástica de alimentos (Spawn acumulativo com modulação sazonal e feedback regulatório)
+        pop_ratio = min(1.0, max(0.40, len(self.organisms) / 14.0))
+        food_ratio = len(self.foods) / max(1, self.max_food)
+        saturation_factor = max(0.25, 1.0 - (food_ratio ** 2))
+        effective_food_spawn = self.food_spawn_rate * self.environment_system.state.food_spawn_multiplier * pop_ratio * saturation_factor
+
+        self._food_accumulator += effective_food_spawn
         while self._food_accumulator >= 1.0:
             self.spawn_food()
             self._food_accumulator -= 1.0
@@ -624,6 +647,11 @@ class World:
                 species=Organism.SPECIES_PREDATOR,
                 importance=5,
             )
+
+        # 8.9 Mitigação BUG-03: Poda periódica de registros genealógicos antigos em sessões ultralongas
+        if self.tick > 0 and self.tick % 250 == 0:
+            if hasattr(self, "genealogy") and len(self.genealogy._records) > 2500:
+                self.genealogy.prune_ancient_records(set(self.organisms.keys()), max_records=2500)
 
         # 9. Avanço do relógio
         self.tick += 1

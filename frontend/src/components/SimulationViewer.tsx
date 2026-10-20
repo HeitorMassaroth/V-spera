@@ -63,6 +63,7 @@ export const SimulationViewer: React.FC<SimulationViewerProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<WorldRenderer | null>(null);
+  const dimensionsRef = useRef<{ width: number; height: number }>({ width: 800, height: 600 });
 
   // Modos de Ferramenta Interativa
   const [activeTool, setActiveTool] = useState<'inspect' | 'feed'>('inspect');
@@ -135,16 +136,16 @@ export const SimulationViewer: React.FC<SimulationViewerProps> = ({
     const handleResize = () => {
       if (!containerRef.current || !canvas) return;
       const rect = containerRef.current.getBoundingClientRect();
-      const dpr = window.devicePixelRatio || 1;
+      const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
 
-      canvas.width = rect.width * dpr;
-      canvas.height = rect.height * dpr;
+      dimensionsRef.current = { width: rect.width, height: rect.height };
+
+      canvas.width = Math.floor(rect.width * dpr);
+      canvas.height = Math.floor(rect.height * dpr);
       canvas.style.width = `${rect.width}px`;
       canvas.style.height = `${rect.height}px`;
 
-      ctx.resetTransform?.();
-      ctx.scale(dpr, dpr);
-
+      renderer.dpr = dpr;
       renderer.resetView(rect.width, rect.height, worldWidth, worldHeight);
     };
 
@@ -155,14 +156,14 @@ export const SimulationViewer: React.FC<SimulationViewerProps> = ({
     let animationFrameId: number;
     const renderLoop = () => {
       if (rendererRef.current && canvas) {
-        const rect = canvas.getBoundingClientRect();
+        const { width: viewW, height: viewH } = dimensionsRef.current;
 
         // Modo Seguir Habitante Selecionado
         if (followSelectedRef.current && selectedIdRef.current !== null) {
           const target = stateRef.current.organisms.find((o) => o.id === selectedIdRef.current);
           if (target) {
-            const targetOffsetX = rect.width / 2 - target.x * rendererRef.current.scale;
-            const targetOffsetY = rect.height / 2 - target.y * rendererRef.current.scale;
+            const targetOffsetX = viewW / 2 - target.x * rendererRef.current.scale;
+            const targetOffsetY = viewH / 2 - target.y * rendererRef.current.scale;
             // Interpolação suave (lerp)
             rendererRef.current.offsetX += (targetOffsetX - rendererRef.current.offsetX) * 0.12;
             rendererRef.current.offsetY += (targetOffsetY - rendererRef.current.offsetY) * 0.12;
@@ -183,8 +184,8 @@ export const SimulationViewer: React.FC<SimulationViewerProps> = ({
           stateRef.current.foods,
           stateRef.current.clusters,
           options,
-          rect.width,
-          rect.height,
+          viewW,
+          viewH,
           stateRef.current.clusterHomes,
           selectedIdRef.current,
           stateRef.current.events,

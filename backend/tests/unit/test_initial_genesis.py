@@ -103,3 +103,29 @@ def test_zero_species_does_not_trigger_false_extinction():
     ]
     assert len(extinction_events) == 0
 
+
+def test_sexual_viability_pioneers():
+    """Garante que qualquer espécie que apareça na gênese aleatória possua ambos os sexos (BUG-01 mitigado)."""
+    for seed in range(50):
+        world = World(seed=seed)
+        p_females = [o for o in world.organisms.values() if o.species == Organism.SPECIES_PREDATOR and o.role == Organism.ROLE_FEMALE]
+        p_males = [o for o in world.organisms.values() if o.species == Organism.SPECIES_PREDATOR and o.role == Organism.ROLE_MALE]
+        v_females = [o for o in world.organisms.values() if o.species == Organism.SPECIES_VRANCO and o.role == Organism.ROLE_FEMALE]
+        v_males = [o for o in world.organisms.values() if o.species == Organism.SPECIES_VRANCO and o.role == Organism.ROLE_MALE]
+
+        # Se houver predadores, ambos os sexos devem estar presentes
+        if p_females or p_males:
+            assert len(p_females) > 0 and len(p_males) > 0
+
+        # Se houver vrancos, ambos os sexos devem estar presentes
+        if v_females or v_males:
+            assert len(v_females) > 0 and len(v_males) > 0
+
+
+def test_initial_food_proportional_to_pioneers():
+    """Garante que a quantidade de comida inicial escale proporcionalmente à população pioneira (BUG-02 mitigado)."""
+    world = World(seed=999)
+    total_pioneers = len(world.organisms)
+    assert len(world.foods) <= max(12, total_pioneers * 4)
+
+

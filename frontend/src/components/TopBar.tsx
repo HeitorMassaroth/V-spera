@@ -9,6 +9,8 @@ interface TopBarProps {
   tick: number;
   isExtinct: boolean;
   season?: SeasonInfo | null;
+  isReconnecting?: boolean;
+  onReconnect?: () => void;
   onPlay: () => void;
   onPause: () => void;
   onStep: () => void;
@@ -24,6 +26,8 @@ export const TopBar: React.FC<TopBarProps> = ({
   tick,
   isExtinct,
   season,
+  isReconnecting,
+  onReconnect,
   onPlay,
   onPause,
   onStep,
@@ -353,13 +357,38 @@ export const TopBar: React.FC<TopBarProps> = ({
           style={{
             display: 'flex',
             alignItems: 'center',
-            gap: '6px',
+            gap: '8px',
+            padding: '4px 10px',
+            borderRadius: '6px',
             fontSize: '11px',
-            color: connected ? '#10B981' : '#EF4444',
+            fontWeight: 600,
+            background: connected ? 'rgba(16, 185, 129, 0.12)' : 'rgba(239, 68, 68, 0.15)',
+            border: `1px solid ${connected ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.35)'}`,
+            color: connected ? '#10B981' : '#FCA5A5',
           }}
-          title={connected ? 'Conectado ao servidor' : 'Tentando reconectar...'}
+          title={connected ? 'Conectado ao servidor' : 'Conexão interrompida. Tentando reconectar...'}
         >
-          {connected ? <Wifi size={16} /> : <WifiOff size={16} />}
+          {connected ? <Wifi size={15} /> : <WifiOff size={15} />}
+          <span>{connected ? 'Ao vivo' : isReconnecting ? 'Reconectando...' : 'Offline'}</span>
+          {!connected && onReconnect && (
+            <button
+              onClick={onReconnect}
+              style={{
+                marginLeft: '2px',
+                padding: '2px 6px',
+                fontSize: '10px',
+                fontWeight: 700,
+                borderRadius: '4px',
+                background: 'rgba(239, 68, 68, 0.25)',
+                border: '1px solid rgba(239, 68, 68, 0.5)',
+                color: '#FFFFFF',
+                cursor: 'pointer',
+              }}
+              title="Forçar tentativa de reconexão imediata"
+            >
+              Reconectar
+            </button>
+          )}
         </div>
       </div>
     </header>

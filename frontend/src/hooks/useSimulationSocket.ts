@@ -15,6 +15,7 @@ import type {
 
 export function useSimulationSocket(wsUrl: string = 'ws://localhost:8000/api/simulation/ws') {
   const [connected, setConnected] = useState<boolean>(false);
+  const [isReconnecting, setIsReconnecting] = useState<boolean>(false);
   const [status, setStatus] = useState<'RUNNING' | 'PAUSED' | 'STOPPED'>('PAUSED');
   const [tps, setTps] = useState<number>(30);
   const [organisms, setOrganisms] = useState<CompactOrganism[]>([]);
@@ -35,14 +36,22 @@ export function useSimulationSocket(wsUrl: string = 'ws://localhost:8000/api/sim
 
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<number | null>(null);
+  const retryDelayRef = useRef<number>(1000);
 
   const connect = useCallback(() => {
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
+
     try {
       const socket = new WebSocket(wsUrl);
       wsRef.current = socket;
 
       socket.onopen = () => {
         setConnected(true);
+        setIsReconnecting(false);
+        retryDelayRef.current = 1000;
       };
 
       socket.onmessage = (event) => {
@@ -90,9 +99,12 @@ export function useSimulationSocket(wsUrl: string = 'ws://localhost:8000/api/sim
 
       socket.onclose = () => {
         setConnected(false);
+        setIsReconnecting(true);
+        const delay = retryDelayRef.current;
+        retryDelayRef.current = Math.min(delay * 1.5, 3500);
         reconnectTimeoutRef.current = window.setTimeout(() => {
           connect();
-        }, 2000);
+        }, delay);
       };
 
       socket.onerror = () => {
@@ -100,6 +112,7 @@ export function useSimulationSocket(wsUrl: string = 'ws://localhost:8000/api/sim
       };
     } catch (e) {
       console.error('Falha ao conectar WebSocket:', e);
+      setIsReconnecting(true);
     }
   }, [wsUrl]);
 
@@ -124,8 +137,22 @@ export function useSimulationSocket(wsUrl: string = 'ws://localhost:8000/api/sim
   const setSpeed = useCallback((newTps: number) => sendAction('set_speed', { tps: newTps }), [sendAction]);
   const spawnFood = useCallback((x: number, y: number) => sendAction('spawn_food', { x, y }), [sendAction]);
 
+  const reconnect = useCallback(() => {
+    if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
+    if (wsRef.current) {
+      try {
+        wsRef.current.close();
+      } catch (_) {}
+    }
+    setIsReconnecting(true);
+    retryDelayRef.current = 1000;
+    connect();
+  }, [connect]);
+
   return {
     connected,
+    isReconnecting,
+    reconnect,
     status,
     tps,
     organisms,
