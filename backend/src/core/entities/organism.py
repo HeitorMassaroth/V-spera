@@ -757,7 +757,14 @@ class Organism:
             "prt": self.partner_id,
             "cf": round(self.carried_food, 1),
             "cln": self.clan_id,
-            "clr": self.clan_role[0] if self.clan_role else None, # 'A' (Alpha), 'B' (Beta), 'M' (Membro)
+            "clr": (
+                "A" if self.clan_role == "ALPHA"
+                else "B" if self.clan_role == "BETA"
+                else "G" if self.clan_role == "GUARDIAN"
+                else "K" if self.clan_role == "COLLECTOR"
+                else "N" if self.clan_role == "NURSE"
+                else ("M" if self.clan_role else None)
+            ),
             "tid": self.territory_id,
             "gen": self.generation,
             "a": self.age,

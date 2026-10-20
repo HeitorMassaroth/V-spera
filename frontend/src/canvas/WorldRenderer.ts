@@ -5,6 +5,7 @@
 
 import type { CompactOrganism, CompactFood, WorldEvent, NestInfo, ClanInfo, TerritoryZoneInfo, SeasonInfo } from '../types';
 import { getClanName } from '../types';
+import { soundManager } from '../audio/SoundManager';
 
 export interface RenderOptions {
   showSensoryRadius: boolean;
@@ -51,6 +52,7 @@ export class WorldRenderer {
   private trails: Map<number, TrailPoint[]> = new Map();
   private weatherParticles: WeatherParticle[] = [];
   private weatherInitialized: boolean = false;
+  private lastSeason: string | null = null;
 
   constructor(ctx: CanvasRenderingContext2D) {
     this.ctx = ctx;
@@ -107,6 +109,7 @@ export class WorldRenderer {
     for (const ev of events) {
       if (ev.tick > this.lastProcessedTick) {
         if (ev.type === 'combat' && ev.x !== undefined && ev.y !== undefined) {
+          soundManager.playCombat();
           this.sparks.push({
             x: ev.x,
             y: ev.y,
@@ -127,6 +130,7 @@ export class WorldRenderer {
             type: 'care',
           });
         } else if (ev.type === 'pair_bonded' && ev.x !== undefined && ev.y !== undefined) {
+          soundManager.playBond();
           this.sparks.push({
             x: ev.x,
             y: ev.y,
@@ -137,6 +141,7 @@ export class WorldRenderer {
             type: 'bond',
           });
         } else if (ev.type === 'birth' && ev.x !== undefined && ev.y !== undefined) {
+          soundManager.playBirth();
           this.sparks.push({
             x: ev.x,
             y: ev.y,
@@ -147,6 +152,7 @@ export class WorldRenderer {
             type: 'birth',
           });
         } else if (ev.type === 'nest_created' && ev.x !== undefined && ev.y !== undefined) {
+          soundManager.playClan();
           this.sparks.push({
             x: ev.x,
             y: ev.y,
@@ -157,6 +163,7 @@ export class WorldRenderer {
             type: 'care',
           });
         } else if (ev.type === 'predation_kill' && ev.x !== undefined && ev.y !== undefined) {
+          soundManager.playCombat();
           this.sparks.push({
             x: ev.x,
             y: ev.y,
@@ -167,6 +174,7 @@ export class WorldRenderer {
             type: 'combat',
           });
         } else if (ev.type === 'mother_defense' && ev.x !== undefined && ev.y !== undefined) {
+          soundManager.playCombat();
           this.sparks.push({
             x: ev.x,
             y: ev.y,
@@ -177,6 +185,7 @@ export class WorldRenderer {
             type: 'combat',
           });
         } else if (ev.type === 'vranco_collective_defense' && ev.x !== undefined && ev.y !== undefined) {
+          soundManager.playCombat();
           this.sparks.push({
             x: ev.x,
             y: ev.y,
@@ -187,6 +196,7 @@ export class WorldRenderer {
             type: 'combat',
           });
         } else if (ev.type === 'predator_defeated' && ev.x !== undefined && ev.y !== undefined) {
+          soundManager.playCombat();
           this.sparks.push({
             x: ev.x,
             y: ev.y,
@@ -197,6 +207,7 @@ export class WorldRenderer {
             type: 'combat',
           });
         } else if (ev.type === 'clan_formed' && ev.x !== undefined && ev.y !== undefined) {
+          soundManager.playClan();
           this.sparks.push({
             x: ev.x,
             y: ev.y,
@@ -207,6 +218,7 @@ export class WorldRenderer {
             type: 'clan',
           });
         } else if (ev.type === 'alpha_elected' && ev.x !== undefined && ev.y !== undefined) {
+          soundManager.playClan();
           this.sparks.push({
             x: ev.x,
             y: ev.y,
@@ -217,6 +229,7 @@ export class WorldRenderer {
             type: 'clan',
           });
         } else if (ev.type === 'beta_elected' && ev.x !== undefined && ev.y !== undefined) {
+          soundManager.playClan();
           this.sparks.push({
             x: ev.x,
             y: ev.y,
@@ -288,6 +301,14 @@ export class WorldRenderer {
 
     this.ingestEvents(events, currentTick);
 
+    // Detecção de mudança de estação climática com sonorização eólica
+    if (season && season.season !== this.lastSeason) {
+      if (this.lastSeason !== null) {
+        soundManager.playSeasonChange();
+      }
+      this.lastSeason = season.season;
+    }
+
     // Limpa fundo
     ctx.fillStyle = '#080C14';
     ctx.fillRect(0, 0, canvasWidth, canvasHeight);
@@ -323,6 +344,9 @@ export class WorldRenderer {
     this.renderSparks(ctx);
 
     ctx.restore();
+
+    // 6. HUD / Camada de Interface em coordenadas da tela: Mini-Mapa / Radar Ecológico
+    this.renderMiniMap(ctx, canvasWidth, canvasHeight, options.worldWidth, options.worldHeight, organisms, clusters, territories);
   }
 
   /**
@@ -977,6 +1001,9 @@ export class WorldRenderer {
         let leaderPrefix = '';
         if (org.clr === 'A') leaderPrefix = '👑 [ALPHA] ';
         else if (org.clr === 'B') leaderPrefix = '⭐ [BETA] ';
+        else if (org.clr === 'G') leaderPrefix = '🛡️ [GUARDIÃO] ';
+        else if (org.clr === 'K') leaderPrefix = '⚡ [COLETOR] ';
+        else if (org.clr === 'N') leaderPrefix = '🍼 [NUTRIZ] ';
         const isVranco = org.sp === 'V';
         const speciesPrefix = isVranco ? '⚡ [VRANCO] ' : '🐺 [PREDADOR] ';
         const tagText = `${speciesPrefix}${leaderPrefix}${org.nm || `Animal #${org.id}`}`;
@@ -985,7 +1012,7 @@ export class WorldRenderer {
         ctx.beginPath();
         ctx.roundRect(org.x - textWidth / 2 - 5, org.y - org.sz - 20, textWidth + 10, 15, 4);
         ctx.fill();
-        ctx.strokeStyle = isVranco ? '#F59E0B' : (org.clr === 'A' ? '#FBBF24' : org.clr === 'B' ? '#93C5FD' : '#38BDF8');
+        ctx.strokeStyle = isVranco ? '#F59E0B' : (org.clr === 'A' ? '#FBBF24' : org.clr === 'B' ? '#93C5FD' : org.clr === 'G' ? '#EF4444' : org.clr === 'K' ? '#FBBF24' : org.clr === 'N' ? '#F472B6' : '#38BDF8');
         ctx.lineWidth = 1;
         ctx.stroke();
         ctx.fillStyle = isVranco ? '#FEF08A' : (org.clr === 'A' ? '#FEF08A' : org.clr === 'B' ? '#DBEAFE' : '#F8FAFC');
@@ -996,7 +1023,7 @@ export class WorldRenderer {
       ctx.save();
       ctx.translate(org.x, org.y);
 
-      // Distintivo vertical para líderes Alpha e Beta
+      // Distintivo vertical para líderes e papéis especializados
       if (org.clr === 'A') {
         // Alpha: Aura dourada pulsante e Coroa 👑
         ctx.beginPath();
@@ -1027,6 +1054,24 @@ export class WorldRenderer {
         ctx.textAlign = 'center';
         ctx.textBaseline = 'bottom';
         ctx.fillText('⭐', 0, -org.sz - 4);
+      } else if (org.clr === 'G') {
+        // Guardião: Escudo 🛡️
+        ctx.font = '10px system-ui, -apple-system, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'bottom';
+        ctx.fillText('🛡️', 0, -org.sz - 4);
+      } else if (org.clr === 'K') {
+        // Coletor: Raio ⚡
+        ctx.font = '10px system-ui, -apple-system, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'bottom';
+        ctx.fillText('⚡', 0, -org.sz - 4);
+      } else if (org.clr === 'N') {
+        // Nutriz: Mamadeira / Cuidadora 🍼
+        ctx.font = '10px system-ui, -apple-system, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'bottom';
+        ctx.fillText('🍼', 0, -org.sz - 4);
       }
 
       ctx.rotate(heading);
@@ -1216,6 +1261,109 @@ export class WorldRenderer {
         this.sparks.splice(i, 1);
       }
     }
+
+    ctx.restore();
+  }
+
+  /**
+   * Renderiza o Mini-Mapa / Radar Ecológico no canto inferior direito do canvas.
+   * Proporciona visão estratégica global de territórios, clãs, centros férteis e habitantes.
+   */
+  private renderMiniMap(
+    ctx: CanvasRenderingContext2D,
+    canvasWidth: number,
+    canvasHeight: number,
+    worldWidth: number,
+    worldHeight: number,
+    organisms: CompactOrganism[],
+    clusters: [number, number][],
+    territories?: TerritoryZoneInfo[]
+  ) {
+    const mapW = 145;
+    const mapH = 98;
+    const pad = 12;
+    const mapX = canvasWidth - mapW - pad;
+    const mapY = canvasHeight - mapH - pad;
+
+    ctx.save();
+    if (this.dpr && this.dpr !== 1.0) {
+      ctx.scale(this.dpr, this.dpr);
+    }
+
+    // 1. Fundo do Mini-Mapa com estilo Glassmorphism
+    ctx.fillStyle = 'rgba(10, 15, 26, 0.88)';
+    ctx.beginPath();
+    ctx.roundRect(mapX, mapY, mapW, mapH, 8);
+    ctx.fill();
+
+    // 2. Borda bioluminescente
+    ctx.strokeStyle = 'rgba(56, 189, 248, 0.35)';
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
+
+    // 3. Título sutil do HUD
+    ctx.font = 'bold 8px system-ui, -apple-system, sans-serif';
+    ctx.fillStyle = '#38BDF8';
+    ctx.textAlign = 'left';
+    ctx.fillText('📡 RADAR ECOLÓGICO', mapX + 8, mapY + 11);
+
+    // Escala de projeção mundo -> radar
+    const scaleX = (mapW - 14) / worldWidth;
+    const scaleY = (mapH - 20) / worldHeight;
+    const innerX = mapX + 7;
+    const innerY = mapY + 15;
+
+    // 4. Territórios regionais no mini-mapa
+    if (territories && territories.length > 0) {
+      for (const zone of territories) {
+        const zx = innerX + zone.x * scaleX;
+        const zy = innerY + zone.y * scaleY;
+        const zr = zone.radius * Math.min(scaleX, scaleY);
+        ctx.beginPath();
+        ctx.arc(zx, zy, Math.max(2, zr), 0, Math.PI * 2);
+        ctx.strokeStyle = zone.status === 'CONTESTED' ? 'rgba(239, 68, 68, 0.45)' : 'rgba(56, 189, 248, 0.18)';
+        ctx.lineWidth = 0.8;
+        ctx.stroke();
+      }
+    }
+
+    // 5. Oásis de recursos
+    if (clusters && clusters.length > 0) {
+      for (const [cx, cy] of clusters) {
+        const mx = innerX + cx * scaleX;
+        const my = innerY + cy * scaleY;
+        ctx.beginPath();
+        ctx.arc(mx, my, 2.5, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(52, 211, 153, 0.65)';
+        ctx.fill();
+      }
+    }
+
+    // 6. Habitantes vivos
+    for (const org of organisms) {
+      const ox = innerX + org.x * scaleX;
+      const oy = innerY + org.y * scaleY;
+      const isVranco = org.sp === 'V';
+      ctx.beginPath();
+      ctx.arc(ox, oy, isVranco ? 1.6 : 1.4, 0, Math.PI * 2);
+      ctx.fillStyle = isVranco ? '#F59E0B' : (org.r === 'F' ? '#FB7185' : '#34D399');
+      ctx.fill();
+    }
+
+    // 7. Retângulo de enquadramento da câmera atual (Viewport)
+    const viewWorldTopLeft = this.screenToWorld(0, 0);
+    const viewWorldBottomRight = this.screenToWorld(canvasWidth, canvasHeight);
+
+    const vx = Math.max(innerX, innerX + viewWorldTopLeft.x * scaleX);
+    const vy = Math.max(innerY, innerY + viewWorldTopLeft.y * scaleY);
+    const vw = Math.min(mapW - 14, Math.max(8, (viewWorldBottomRight.x - viewWorldTopLeft.x) * scaleX));
+    const vh = Math.min(mapH - 20, Math.max(8, (viewWorldBottomRight.y - viewWorldTopLeft.y) * scaleY));
+
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.55)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([2, 2]);
+    ctx.strokeRect(vx, vy, vw, vh);
+    ctx.setLineDash([]);
 
     ctx.restore();
   }

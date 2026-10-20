@@ -32,6 +32,11 @@ import {
   ArrowRight,
   CornerDownRight,
   X,
+  Download,
+  FileSpreadsheet,
+  FileJson,
+  TrendingUp,
+  BarChart2,
 } from 'lucide-react';
 
 interface MetricsPanelProps {
@@ -122,6 +127,56 @@ export const MetricsPanel: React.FC<MetricsPanelProps> = ({
       console.error('Falha ao carregar detalhes do evento:', e);
     } finally {
       setDetailLoading(false);
+    }
+  };
+
+  const [hoveredScatterOrg, setHoveredScatterOrg] = useState<CompactOrganism | null>(null);
+
+  // Exportação de Dados: Séries temporais em CSV
+  const exportHistoryCSV = () => {
+    if (!history || history.length === 0) return;
+    const headers = ['tick', 'populacao', 'alimentos', 'energia_media'];
+    const rows = history.map((h) => [h.tick, h.pop, h.food, h.avgEnergy.toFixed(2)]);
+    const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `vespera_telemetria_t${metrics?.tick ?? 0}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  // Exportação de Dados: Crônica e Telemetria em JSON
+  const exportChronicleJSON = async () => {
+    try {
+      const res = await fetch('/api/simulation/chronicle?limit=250');
+      const dataToExport: Record<string, unknown> = {
+        tick: metrics?.tick ?? 0,
+        exported_at: new Date().toISOString(),
+        metrics: metrics,
+        ecology: currentEcology,
+        season: currentSeason,
+        history: history,
+      };
+      if (res.ok) {
+        const json = await res.json();
+        dataToExport.chronicle = json;
+      }
+      const jsonContent = JSON.stringify(dataToExport, null, 2);
+      const blob = new Blob([jsonContent], { type: 'application/json;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `vespera_ensaio_completo_t${metrics?.tick ?? 0}.json`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error('Falha ao exportar JSON:', e);
     }
   };
 
@@ -938,6 +993,71 @@ export const MetricsPanel: React.FC<MetricsPanelProps> = ({
                 <HeartPulse size={13} /> Dinâmica Populacional
               </div>
               {renderSparkline()}
+            </div>
+
+            {/* Exportação de Dados Científicos */}
+            <div
+              style={{
+                background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.75) 0%, rgba(30, 41, 59, 0.85) 100%)',
+                padding: '12px',
+                borderRadius: '8px',
+                border: '1px solid rgba(56, 189, 248, 0.25)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '8px',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ fontSize: '11px', fontWeight: 700, color: '#38BDF8', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Download size={13} /> Exportação de Dados
+                </div>
+                <span style={{ fontSize: '9px', color: '#94A3B8' }}>Telemetria & Crônica</span>
+              </div>
+              <p style={{ fontSize: '10px', color: 'rgba(255, 255, 255, 0.6)', lineHeight: '1.4' }}>
+                Baixe séries temporais e crônicas causais para análise em R, Python (Pandas) ou planilhas.
+              </p>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+                <button
+                  onClick={exportHistoryCSV}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '4px',
+                    padding: '6px 8px',
+                    fontSize: '10px',
+                    fontWeight: 700,
+                    borderRadius: '6px',
+                    border: '1px solid rgba(52, 211, 153, 0.35)',
+                    background: 'rgba(52, 211, 153, 0.15)',
+                    color: '#34D399',
+                    cursor: 'pointer',
+                  }}
+                  title="Exportar dados populacionais e ecológicos em CSV"
+                >
+                  <FileSpreadsheet size={12} /> Séries (.CSV)
+                </button>
+                <button
+                  onClick={exportChronicleJSON}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '4px',
+                    padding: '6px 8px',
+                    fontSize: '10px',
+                    fontWeight: 700,
+                    borderRadius: '6px',
+                    border: '1px solid rgba(56, 189, 248, 0.35)',
+                    background: 'rgba(56, 189, 248, 0.15)',
+                    color: '#38BDF8',
+                    cursor: 'pointer',
+                  }}
+                  title="Exportar ensaio completo com eventos e métricas em JSON"
+                >
+                  <FileJson size={12} /> Ensaio (.JSON)
+                </button>
+              </div>
             </div>
           </>
         )}
@@ -2020,6 +2140,207 @@ export const MetricsPanel: React.FC<MetricsPanelProps> = ({
                 </div>
               </div>
             </div>
+
+            {/* Gráfico de Dispersão Fenotípica em Tempo Real (Velocidade vs Força) */}
+            <div
+              style={{
+                background: 'rgba(15, 23, 42, 0.75)',
+                border: '1px solid rgba(168, 85, 247, 0.25)',
+                borderRadius: '8px',
+                padding: '10px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '8px',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <BarChart2 size={13} color="#C084FC" />
+                  <span style={{ fontSize: '11px', fontWeight: 700, color: '#F8FAFC' }}>
+                    Dispersão Fenotípica (Velocidade x Força)
+                  </span>
+                </div>
+                <div style={{ display: 'flex', gap: '6px', fontSize: '9px' }}>
+                  <span style={{ color: '#F59E0B' }}>● Vranco</span>
+                  <span style={{ color: '#EF4444' }}>● Predador</span>
+                </div>
+              </div>
+
+              {/* Scatter Plot SVG */}
+              <div style={{ position: 'relative', width: '100%', height: '170px' }}>
+                <svg
+                  width="100%"
+                  height="170"
+                  viewBox="0 0 300 170"
+                  style={{ overflow: 'visible', background: 'rgba(10, 15, 26, 0.65)', borderRadius: '6px' }}
+                >
+                  {/* Grid Lines */}
+                  <line x1="32" y1="18" x2="32" y2="145" stroke="rgba(255,255,255,0.12)" strokeWidth="1" />
+                  <line x1="32" y1="145" x2="290" y2="145" stroke="rgba(255,255,255,0.12)" strokeWidth="1" />
+                  <line x1="32" y1="81" x2="290" y2="81" stroke="rgba(255,255,255,0.06)" strokeDasharray="3 3" />
+                  <line x1="161" y1="18" x2="161" y2="145" stroke="rgba(255,255,255,0.06)" strokeDasharray="3 3" />
+
+                  {/* Quadrant Hints */}
+                  <text x="36" y="28" fill="rgba(255,255,255,0.25)" fontSize="8">Tanque</text>
+                  <text x="245" y="28" fill="rgba(255,255,255,0.25)" fontSize="8">Apex / Alpha</text>
+                  <text x="36" y="140" fill="rgba(255,255,255,0.25)" fontSize="8">Adaptativo</text>
+                  <text x="240" y="140" fill="rgba(255,255,255,0.25)" fontSize="8">Ágil / Coletor</text>
+
+                  {/* Axis Labels */}
+                  <text x="12" y="85" fill="#94A3B8" fontSize="8" transform="rotate(-90 12,85)" textAnchor="middle">
+                    Força
+                  </text>
+                  <text x="161" y="162" fill="#94A3B8" fontSize="8" textAnchor="middle">
+                    Velocidade (v)
+                  </text>
+
+                  {/* Points */}
+                  {organisms.map((org) => {
+                    const plotW = 258;
+                    const plotH = 127;
+                    const minX = 32;
+                    const minY = 18;
+                    const maxV = 6.0;
+                    const maxF = 45.0;
+
+                    const cx = minX + Math.min(plotW, Math.max(0, ((org.v || 1.5) / maxV) * plotW));
+                    const cy = minY + plotH - Math.min(plotH, Math.max(0, ((org.f || 15) / maxF) * plotH));
+                    const isVranco = org.sp === 'V';
+                    const isHovered = hoveredScatterOrg?.id === org.id;
+
+                    return (
+                      <g
+                        key={org.id}
+                        style={{ cursor: 'pointer' }}
+                        onMouseEnter={() => setHoveredScatterOrg(org)}
+                        onMouseLeave={() => setHoveredScatterOrg(null)}
+                        onClick={() => onSelectOrganism(org.id)}
+                      >
+                        {isHovered && (
+                          <circle
+                            cx={cx}
+                            cy={cy}
+                            r="8"
+                            fill="none"
+                            stroke={isVranco ? '#F59E0B' : '#EF4444'}
+                            strokeWidth="1.5"
+                            opacity="0.8"
+                          />
+                        )}
+                        <circle
+                          cx={cx}
+                          cy={cy}
+                          r={isHovered ? 5 : 3.5}
+                          fill={isVranco ? '#F59E0B' : (org.r === 'F' ? '#FB7185' : '#EF4444')}
+                          stroke="rgba(0,0,0,0.6)"
+                          strokeWidth="0.8"
+                        />
+                      </g>
+                    );
+                  })}
+                </svg>
+              </div>
+
+              {/* Hover Tooltip or Stats Summary */}
+              {hoveredScatterOrg ? (
+                <div
+                  style={{
+                    background: 'rgba(0, 0, 0, 0.4)',
+                    padding: '6px 8px',
+                    borderRadius: '4px',
+                    fontSize: '10px',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                  }}
+                >
+                  <span style={{ color: '#F8FAFC', fontWeight: 600 }}>
+                    {hoveredScatterOrg.sp === 'V' ? '⚡ Vranco' : '🐺 Predador'} #{hoveredScatterOrg.id} ({hoveredScatterOrg.r})
+                  </span>
+                  <div style={{ display: 'flex', gap: '8px', color: '#94A3B8' }}>
+                    <span>Vel: <strong style={{ color: '#38BDF8' }}>{hoveredScatterOrg.v?.toFixed(1) ?? '—'}</strong></span>
+                    <span>Força: <strong style={{ color: '#F59E0B' }}>{hoveredScatterOrg.f?.toFixed(1) ?? '—'}</strong></span>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ fontSize: '9px', color: '#64748B', textAlign: 'center' }}>
+                  Passe o mouse sobre um indivíduo para inspecionar seu fenótipo ou clique para rastrear.
+                </div>
+              )}
+            </div>
+
+            {/* Painel de Comparação de Gerações (Pioneiros G0 vs Geração Atual) */}
+            {metrics?.evolution?.generations && metrics.evolution.generations[0] && (metrics.max_generation ?? 0) > 0 && (
+              (() => {
+                const gen0 = metrics.evolution.generations[0];
+                const curGen = metrics.evolution.generations[metrics.max_generation ?? 0] || gen0;
+                const dForca = curGen.avg_forca - gen0.avg_forca;
+                const dVel = curGen.avg_velocidade - gen0.avg_velocidade;
+                const dRes = curGen.avg_resistencia - gen0.avg_resistencia;
+                const dCol = curGen.avg_coleta - gen0.avg_coleta;
+
+                return (
+                  <div
+                    style={{
+                      background: 'rgba(15, 23, 42, 0.65)',
+                      border: '1px solid rgba(16, 185, 129, 0.25)',
+                      borderRadius: '8px',
+                      padding: '10px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '8px',
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <TrendingUp size={13} color="#34D399" />
+                        <span style={{ fontSize: '11px', fontWeight: 700, color: '#F8FAFC' }}>
+                          Deriva & Seleção: G0 vs G{metrics.max_generation}
+                        </span>
+                      </div>
+                      <span style={{ fontSize: '9px', padding: '2px 5px', borderRadius: '4px', background: 'rgba(16, 185, 129, 0.15)', color: '#34D399', fontWeight: 700 }}>
+                        {metrics.max_generation} gerações
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '4px', textAlign: 'center', fontSize: '9px' }}>
+                      <div style={{ background: 'rgba(255, 255, 255, 0.03)', padding: '6px 4px', borderRadius: '4px' }}>
+                        <div style={{ color: '#94A3B8' }}>Força</div>
+                        <div style={{ fontSize: '11px', fontWeight: 700, color: dForca >= 0 ? '#34D399' : '#F87171', marginTop: '2px' }}>
+                          {dForca >= 0 ? `+${dForca.toFixed(1)}` : dForca.toFixed(1)}
+                        </div>
+                        <div style={{ fontSize: '8px', color: '#64748B' }}>{gen0.avg_forca.toFixed(1)} &rarr; {curGen.avg_forca.toFixed(1)}</div>
+                      </div>
+
+                      <div style={{ background: 'rgba(255, 255, 255, 0.03)', padding: '6px 4px', borderRadius: '4px' }}>
+                        <div style={{ color: '#94A3B8' }}>Velocidade</div>
+                        <div style={{ fontSize: '11px', fontWeight: 700, color: dVel >= 0 ? '#34D399' : '#F87171', marginTop: '2px' }}>
+                          {dVel >= 0 ? `+${dVel.toFixed(1)}` : dVel.toFixed(1)}
+                        </div>
+                        <div style={{ fontSize: '8px', color: '#64748B' }}>{gen0.avg_velocidade.toFixed(1)} &rarr; {curGen.avg_velocidade.toFixed(1)}</div>
+                      </div>
+
+                      <div style={{ background: 'rgba(255, 255, 255, 0.03)', padding: '6px 4px', borderRadius: '4px' }}>
+                        <div style={{ color: '#94A3B8' }}>Resistência</div>
+                        <div style={{ fontSize: '11px', fontWeight: 700, color: dRes >= 0 ? '#34D399' : '#F87171', marginTop: '2px' }}>
+                          {dRes >= 0 ? `+${dRes.toFixed(1)}` : dRes.toFixed(1)}
+                        </div>
+                        <div style={{ fontSize: '8px', color: '#64748B' }}>{gen0.avg_resistencia.toFixed(1)} &rarr; {curGen.avg_resistencia.toFixed(1)}</div>
+                      </div>
+
+                      <div style={{ background: 'rgba(255, 255, 255, 0.03)', padding: '6px 4px', borderRadius: '4px' }}>
+                        <div style={{ color: '#94A3B8' }}>Coleta</div>
+                        <div style={{ fontSize: '11px', fontWeight: 700, color: dCol >= 0 ? '#34D399' : '#F87171', marginTop: '2px' }}>
+                          {dCol >= 0 ? `+${dCol.toFixed(1)}` : dCol.toFixed(1)}
+                        </div>
+                        <div style={{ fontSize: '8px', color: '#64748B' }}>{gen0.avg_coleta.toFixed(1)} &rarr; {curGen.avg_coleta.toFixed(1)}</div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()
+            )}
 
             {/* Evolução de Atributos por Geração */}
             <div>

@@ -293,7 +293,7 @@ class ClanSystem:
 
                 clan.elect_leaders(organisms, tick, force=False)
 
-                # Atualiza papéis clan_role nos organismos
+                # Atualiza papéis clan_role nos organismos com especialização ocupacional
                 for org in organisms.values():
                     if org.clan_id == clan.id:
                         if org.id == clan.alpha_id:
@@ -301,7 +301,17 @@ class ClanSystem:
                         elif org.id == clan.beta_id:
                             org.clan_role = "BETA"
                         else:
-                            org.clan_role = "MEMBRO"
+                            forca = getattr(org.genome, "forca", 50.0) if hasattr(org, "genome") else 50.0
+                            vel = getattr(org.genome, "velocidade", 50.0) if hasattr(org, "genome") else 50.0
+                            soc = getattr(org.personality, "sociability", 0.5) if hasattr(org, "personality") else 0.5
+                            if forca >= 58.0:
+                                org.clan_role = "GUARDIAN"
+                            elif vel >= 56.0:
+                                org.clan_role = "COLLECTOR"
+                            elif getattr(org, "sex", "M") == "F" and soc >= 0.55:
+                                org.clan_role = "NURSE"
+                            else:
+                                org.clan_role = "MEMBRO"
 
                 # Emite eventos se houve troca de liderança
                 if clan.alpha_id != old_alpha and clan.alpha_id is not None:

@@ -1,9 +1,7 @@
 # 📋 Diagnóstico, Bugs & Melhorias Futuras — VÉSPERA
-*Documento vivo de rastreamento de qualidade, pontos de atenção e roteiro de evolução contínua da simulação.*
-
-**Última Atualização:** Outubro de 2026  
+*Documento vivo de rastreamento de qualidade, pontos de atenção e roteiro de evolução contínua da s**Última Atualização:** Outubro de 2026  
 **Branch Atual:** `feature/natural-genesis-pioneers`  
-**Status da Suíte de Testes:** 128/128 Testes Aprovados (`pytest`) • Build Frontend OK
+**Status da Suíte de Testes:** 132/132 Testes Aprovados (`pytest`) • Build Frontend OK (TypeScript & Vite)
 
 ---
 
@@ -14,6 +12,8 @@ O ecossistema **VÉSPERA** atingiu um estado de alta maturidade arquitetural e f
 - **Sem Geração Espontânea:** Zero ninhos e zero clãs pré-fabricados. Toda e qualquer reprodução exige encontro, compatibilidade, corte, vínculo monogâmico e dois pais biológicos comprovados na árvore genealógica.
 - **Ecologia Dinâmica Integrada:** 4 estações climáticas com partículas dinâmicas no Canvas, 8 zonas territoriais com pontuação ecológica, dinâmica de clãs com liderança Alpha/Beta, moral e diplomacia (Aliança, Trégua, Neutralidade, Guerra).
 - **Crônica Histórica Causal:** Registro centralizado com busca, causalidade de eventos e preservação de memória.
+- **Especialização de Clãs:** Guardiões, Coletores e Nutrizes com fenótipos emergentes e insignias no Canvas.
+- **Telemetria & Sensorialidade:** Mini-Mapa Radar translúcido no Canvas, sintetizador de áudio procedural (Web Audio API), scatter plot fenotípico interativo, comparativo de seleção de gerações e exportação de dados em CSV/JSON.
 
 Abaixo estão catalogados os **pontos de atenção/bugs potenciais** e o **roteiro detalhado de melhorias técnicas e visuais**.
 
@@ -34,46 +34,49 @@ Abaixo estão catalogados os **pontos de atenção/bugs potenciais** e o **rotei
 ## 🚀 2. Melhorias Recomendadas por Módulo
 
 ### 2.1 Backend & Motor da Simulação (`backend/`)
-- [ ] **Spawn de Comida Dinâmico Proporcional (Feedback Regulatório):**
-  - Ajustar o multiplicador de geração de alimento para responder à biomassa vegetal não consumida, simulando esgotamento de solo e saturação ecológica natural.
-- [ ] **Especialização Ocupacional nos Clãs:**
-  - Além de Alpha e Beta, permitir que membros adultos assumam papéis emergentes baseados em personalidade e genoma:
-    - *Guardião:* Indivíduos com alta Força patrulham as bordas do ninho.
-    - *Coletor:* Indivíduos rápidos e sociáveis priorizam transporte de comida comunitária.
-    - *Nutriz:* Fêmeas mais carinhosas e dóceis cuidam dos filhotes de outras famílias do clã durante o inverno.
+- [x] **Spawn de Comida Dinâmico Proporcional (Feedback Regulatório):**
+  - Ajustado multiplicador de geração de alimento com curva de saturação logística quadrática (`saturation_factor`) e amortecimento populacional (`pop_ratio`).
+- [x] **Especialização Ocupacional nos Clãs:**
+  - Além de Alpha e Beta, membros adultos assumem papéis emergentes baseados em fenótipo e personalidade:
+    - *Guardião:* Indivíduos com alta Força (`>= 58.0`) patrulham e recebem insígnia `🛡️ [GUARDIÃO]`.
+    - *Coletor:* Indivíduos rápidos (`>= 56.0`) priorizam forrageamento e recebem insígnia `⚡ [COLETOR]`.
+    - *Nutriz:* Fêmeas sociáveis e dóceis cuidam dos filhotes e recebem insígnia `🍼 [NUTRIZ]`.
+- [x] **Persistência de Snapshot Completo em Disco:**
+  - Endpoints `/api/simulation/snapshot` e `/api/simulation/restore-snapshot` permitindo salvar e restaurar ensaios científicos anteriores com integridade determinística de RNG, genealogia e crônica. Validado em `test_snapshot_api.py`.
 - [ ] **Patologias & Imunidade Genética:**
-  - Traço genético de resistência imunológica. Regiões territoriais degradadas ou com superpopulação passam a ter probabilidade de surgimento de agentes infecciosos sazonais.
-- [ ] **Persistência em Disco SQLite / ZSTD:**
-  - Adicionar opção de salvar o snapshot atual do mundo em arquivo `.bin` ou banco local SQLite, permitindo carregar ensaios científicos anteriores.
+  - Traço genético de resistência imunológica e probabilidade de infecção sazonal em zonas degradadas.
 - [ ] **Otimizações Cinemáticas:**
-  - Vetorização do cálculo de forças de repulsão de colisão entre organismos para sustentar > 1.000 organismos simultâneos a 60 TPS sem perda de taxa de quadros.
+  - Vetorização contínua do cálculo de forças de repulsão entre organismos para sustentar > 1.000 organismos simultâneos.
 
 ---
 
 ### 2.2 Visual, Canvas & Frontend (`frontend/`)
+- [x] **Mini-Mapa / Radar Ecológico:**
+  - HUD holográfico translúcido no canto inferior direito do Canvas (`renderMiniMap`) exibindo em tempo real: zonas territoriais, oásis de alimentação, espécimes vivos (Vrancos vs Predadores) e enquadramento da câmera (viewport).
+- [x] **Gráficos de Dispersão Fenotípica em Tempo Real (Scatter Plot):**
+  - Gráfico 2D SVG interativo no painel de evolução: Eixo X (Velocidade) vs Eixo Y (Força), linhas de quadrante (*Apex, Tanque, Ágil, Adaptativo*), hover com tooltip e clique para selecionar organismo.
+- [x] **Efeitos Sonoros Biológicos Procedurais (Web Audio API):**
+  - Síntese sonora procedural em tempo real em `SoundManager.ts` (sem arquivos pesados):
+    - Arpeggio harmônico ascendente no nascimento (`playBirth`).
+    - Impacto percussivo abafado em combates e predação (`playCombat`).
+    - Acorde suave em vínculos monogâmicos (`playBond`).
+    - Ressonância tríade na aclamação de clãs e líderes (`playClan`).
+    - Sino eólico etéreo na transição de estações climáticas (`playSeasonChange`).
+    - Botão interativo de Som/Mudo na `TopBar`.
 - [ ] **Árvore Genealógica Interativa em Grafo (Filogenia Visual):**
-  - Componente com visualização tipo árvore hierárquica (estilo D3 ou SVG/Canvas) permitindo clicar em qualquer indivíduo e rastrear linhagem paterna/materna, mutações acumuladas e coeficiente de consanguinidade até os pioneiros.
-- [ ] **Mini-Mapa / Radar Ecológico:**
-  - Inserir no canto inferior direito do canvas um mini-radar translúcido exibindo a localização relativa dos territórios, oásis de clãs e concentrações populacionais.
-- [ ] **Gráficos de Dispersão Fenotípica em Tempo Real:**
-  - Gráfico de dispersão 2D interativo no painel de evolução: Eixo X (Velocidade) vs Eixo Y (Força), permitindo visualizar a especiação morfológica ao longo das gerações.
-- [ ] **Efeitos Sonoros Biológicos Procedurais (Web Audio API):**
-  - Síntese de áudio leve e nativa (sem arquivos pesados de áudio) para eventos marcantes:
-    - Piado suave de filhote no nascimento.
-    - Impacto abafado em disputas territoriais.
-    - Sussurro de vento suave na mudança de estação climática.
+  - Componente com visualização tipo árvore hierárquica gráfica permitindo clicar em qualquer indivíduo e rastrear linhagem.
 - [ ] **Controle de Câmera Suave (Cinematic Auto-Tracking):**
-  - Modo "Câmera de Documentário" que seleciona automaticamente o habitante envolvido no evento mais dramático do momento (ex: caçada de predador, nascimento ou duelo de líderes).
+  - Modo que acompanha automaticamente o habitante envolvido no evento de maior dramaticidade do ciclo.
 
 ---
 
 ### 2.3 Interface do Usuário & Análise (`MetricsPanel.tsx` & `ControlBar.tsx`)
-- [ ] **Exportação de Dados da Simulação:**
-  - Botão para exportar séries temporais completas em formato `.csv` ou `.json` (população por espécie, biomassa vegetal, médias genéticas por tick).
-- [ ] **Filtros Avançados na Linha do Tempo da Crônica:**
-  - Filtro por dinastia/linhagem fundadora e busca textual instantânea por palavras-chave em causas e resultados históricos.
-- [ ] **Painel de Comparação de Gerações:**
-  - Comparar estatísticas da Geração 0 (Pioneiros Fundadores) com a Geração atual para evidenciar quantitativamente a seleção natural ocorrida.
+- [x] **Exportação de Dados da Simulação:**
+  - Botões dedicados no painel geral para exportar séries temporais completas em `.csv` (`exportHistoryCSV`) e ensaio integral com crônica causal em `.json` (`exportChronicleJSON`).
+- [x] **Painel de Comparação de Gerações:**
+  - Módulo analítico comparando a Geração 0 (Pioneiros Fundadores) com a Geração atual, quantificando a seleção natural: Δ Força, Δ Velocidade, Δ Resistência e Δ Coleta.
+- [x] **Filtros Avançados na Linha do Tempo da Crônica:**
+  - Filtros por espécie, tipo de acontecimento, clã, estrelas de importância e busca textual instantânea de causalidade por palavras-chave em causas e resultados históricos.
 
 ---
 

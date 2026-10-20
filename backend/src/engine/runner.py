@@ -99,6 +99,14 @@ class SimulationRunner:
         logger.info(f"Taxa de simulação alterada para {self.tps} TPS.")
         return self.tps
 
+    async def restore_world(self, world: World) -> Dict[str, Any]:
+        """Restaura o mundo a partir de uma instância desserializada e faz broadcast do estado."""
+        async with self._lock:
+            self.world = world
+            await self._broadcast_current_state()
+            logger.info(f"Mundo restaurado com sucesso no ciclo #{self.world.tick}.")
+            return self.world.get_metrics()
+
     async def stop(self) -> None:
         """Encerra a execução do runner."""
         async with self._lock:

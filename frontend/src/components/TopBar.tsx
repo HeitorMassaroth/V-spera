@@ -1,6 +1,7 @@
-import React from 'react';
-import { Play, Pause, SkipForward, RotateCcw, SlidersHorizontal, Activity, Wifi, WifiOff } from 'lucide-react';
+import React, { useState } from 'react';
+import { Play, Pause, SkipForward, RotateCcw, SlidersHorizontal, Activity, Wifi, WifiOff, Volume2, VolumeX } from 'lucide-react';
 import type { SeasonInfo } from '../types';
+import { soundManager } from '../audio/SoundManager';
 
 interface TopBarProps {
   connected: boolean;
@@ -35,6 +36,13 @@ export const TopBar: React.FC<TopBarProps> = ({
   onSpeedChange,
   onOpenConfig,
 }) => {
+  const [muted, setMuted] = useState<boolean>(soundManager.isMuted());
+
+  const handleToggleAudio = () => {
+    const next = soundManager.toggleMute();
+    setMuted(next);
+  };
+
   return (
     <header
       style={{
@@ -339,6 +347,29 @@ export const TopBar: React.FC<TopBarProps> = ({
           title="Configurar Parâmetros do Experimento"
         >
           <SlidersHorizontal size={15} /> Parâmetros
+        </button>
+
+        {/* Audio Procedural Toggle Button */}
+        <button
+          onClick={handleToggleAudio}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '8px 12px',
+            borderRadius: '8px',
+            background: muted ? 'rgba(255, 255, 255, 0.04)' : 'rgba(16, 185, 129, 0.15)',
+            color: muted ? '#94A3B8' : '#34D399',
+            fontWeight: 600,
+            fontSize: '13px',
+            border: `1px solid ${muted ? 'rgba(255, 255, 255, 0.1)' : 'rgba(16, 185, 129, 0.35)'}`,
+            cursor: 'pointer',
+            transition: 'all 0.2s ease',
+          }}
+          title={muted ? 'Áudio Procedural Desativado (Clique para ativar sonorização nativa)' : 'Áudio Procedural Ativo (Web Audio API)'}
+        >
+          {muted ? <VolumeX size={15} /> : <Volume2 size={15} />}
+          <span>{muted ? 'Mudo' : 'Som'}</span>
         </button>
       </div>
 

@@ -9,6 +9,7 @@ from api.schemas.control import ResetParams, SpeedParams, SimulationStatusRespon
 from engine.runner import SimulationRunner
 from api.websocket_manager import WebSocketManager
 from core.entities.clan import calculate_leadership_score
+from core.world import World
 
 logger = logging.getLogger("vespera.api")
 
@@ -244,6 +245,26 @@ def create_simulation_router(
         y = float(params.get("y", runner.world.height / 2.0))
         food = runner.world.spawn_food_at(x, y)
         return {"status": "ok", "food_id": food.id, "x": food.x, "y": food.y}
+
+    @router.get("/snapshot", response_model=Dict[str, Any])
+    async def get_world_snapshot():
+        """Exporta o snapshot completo e determinístico do estado do ecossistema."""
+        return runner.world.to_snapshot()
+
+    @router.post("/restore-snapshot", response_model=Dict[str, Any])
+    async def restore_world_snapshot(snapshot: Dict[str, Any]):
+        """Restaura a simulação a partir de um snapshot completo com integridade total."""
+        try:
+            restored_world = World.from_snapshot(snapshot)
+            metrics = await runner.restore_world(restored_world)
+            return {
+                "status": "ok",
+                "message": f"Mundo restaurado com sucesso no ciclo #{restored_world.tick}",
+                "metrics": metrics,
+            }
+        except Exception as e:
+            logger.error(f"Erro ao restaurar snapshot: {e}")
+            raise HTTPException(status_code=400, detail=f"Falha ao restaurar snapshot: {str(e)}")
 
     # Rota WebSocket
     @router.websocket("/ws")
